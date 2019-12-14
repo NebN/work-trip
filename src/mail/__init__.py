@@ -1,3 +1,3 @@
 from .EmailReader import EmailReader
 
-__all__ = ['EmailReader']
+__all__ = ['EmailReader', 'EmailWriter']

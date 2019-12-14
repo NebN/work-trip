@@ -8,7 +8,6 @@ from pdfminer.layout import LAParams
 from pdfminer.pdfpage import PDFPage
 
 
-
 class Pdf:
 
     TRENORD_PATTERN='''(\d{2}\s\w{3}\s\d{4})'''
