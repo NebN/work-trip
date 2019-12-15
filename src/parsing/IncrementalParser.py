@@ -21,6 +21,6 @@ class IncrementalParser:
             matches = list(map(lambda x: res.group(x), range(1, len(res.groups()) + 1)))
             for match in matches:
                 if match:
-                    self._text = self._text.replace(match, '').strip()
+                    self._text = self._text.replace(match, '', 1).strip()
 
             return matches
