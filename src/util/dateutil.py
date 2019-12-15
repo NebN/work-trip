@@ -4,7 +4,7 @@ from datetime import date
 
 def last_date_of_day(day_number):
     today = date.today()
-    if today.day >= int(day_number):
+    if today.day >= day_number:
         return today.replace(day=day_number)
     else:
         return (today.replace(day=1) - timedelta(days=1)).replace(day=day_number)

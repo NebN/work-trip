@@ -1,6 +1,7 @@
 import unittest
 from datetime import date
 from src.parsing import *
+from src.util import dateutil
 
 
 class ParsingTests(unittest.TestCase):
@@ -27,8 +28,17 @@ class ParsingTests(unittest.TestCase):
         self.assertEqual(expense.amount, '29.95')
         self.assertEqual(expense.payed_on, date.today())
 
-    def test_parse_expense(self):
-        expense = parse_expense(' 29.95 24/1 asd')
+    def test_parse_expense_day_month(self):
+        expense = parse_expense(' 29.95 24/1 some description')
         self.assertEqual(expense.amount, '29.95')
         self.assertEqual(expense.payed_on, date(2019, 1, 24))
+        self.assertEqual(expense.description, 'some description')
+
+    def test_parse_expense_day(self):
+        today = date.today()
+        last_date_with_day_24 = today.replace(day=24) if today.day >= 24 else today.replace(day=24, month=today.month-1)
+        expense = parse_expense(' 29.95 24 some description')
+        self.assertEqual(expense.amount, '29.95')
+        self.assertEqual(expense.payed_on, last_date_with_day_24)
+        self.assertEqual(expense.description, 'some description')
 

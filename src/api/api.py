@@ -5,7 +5,7 @@ from itsdangerous import URLSafeSerializer, BadSignature
 
 from src.log import logging
 from src.mail import sender
-from src.model import Employee, Email
+from src.model import Email
 from src.persistence import Database
 from src import parsing
 from . import slack
@@ -48,14 +48,11 @@ def register():
                 _logger.debug('email %s already exists %s verified status=%s', address, existing_email.verified)
                 return slack.respond(f'{address} already registered, verified status={existing_email.verified}')
             user_id = request.values['user_id']
-            if not db.get_employee(user_id):
-                employee = Employee(user_id=user_id, user_name=request.values['user_name'])
-                _logger.debug('adding new Employee following email registration request: %s', employee)
-                db.add_employee(employee)
+            db.add_employee_if_not_exists(user_id, request.values['user_name'])
 
             serializer = URLSafeSerializer(os.getenv('SECRET_KEY'))
             verification_token = serializer.dumps(address, salt=os.getenv('SALT'))
-            base_domain = os.getenv("BASE_DOMAIN")
+            base_domain = os.getenv('BASE_DOMAIN')
             verification_link = f'{base_domain}/confirm/{verification_token}'
             db.add_email(Email(address=address, employee_user_id=user_id))
             _logger.debug('verification link %s', verification_link)
@@ -86,7 +83,6 @@ def confirm(token):
 
 
 '''
-TODO
 Adds an expense to a date if specified, today if not.
 A description can also be added.
 
@@ -99,17 +95,40 @@ Usages:
 def add():
     text = request.values['text']
     expense = parsing.parse_expense(text)
-    return 'adding %s' % expense
+    if expense:
+        with Database() as db:
+            user_id = request.values['user_id']
+            db.add_employee_if_not_exists(user_id, request.values['user_name'])
+            expense.employee_user_id = user_id
+            expense_id = db.add_expense(expense)
+        return slack.respond(f'Expense added. Amount={expense.amount}, date={expense.payed_on}'
+                             f'{f", description={expense.description}" if expense.description else ""}. '
+                             f'If you wish to delete the expense use /delete {expense_id}.')
+    else:
+        return slack.respond('Could not parse expense information from your message. '
+                             'Valid formats include:\n'
+                             '/add 28.5\n'
+                             '/add 28.5 15\n'
+                             '/add 28.5 15/11\n'
+                             'You can always add a description at the end of the message.')
 
 
 '''
-TODO
-Removes an expense given the id.
+Deletes an expense with given id.
 '''
-@api.route('remove/<id>', methods=['POST'])
-def remove(expense_id):
+@api.route('/delete', methods=['POST'])
+def delete():
+    expense_id = request.values['text'].strip()
     with Database() as db:
-        db.delete_expense(expense_id)
+        expense = db.get_expense(expense_id)
+        if not expense:
+            return slack.respond(f'No expense with id {expense_id} found.')
+        if expense.employee_user_id != request.values['user_id']:
+            return slack.respond(f'This expense does not belong to you ({request.values["user_name"]}).')
+        if db.delete_expense(expense_id):
+            return slack.respond(f'Expense [{expense.amount} {expense.payed_on} {expense.description}] '
+                                 f'deleted successfully.')
+        return slack.respond('Something went wrong while deleting the expense.')
 
 
 '''
@@ -127,7 +146,7 @@ def recap():
 
 
 '''
-TODO
+TODO ish
 Handles chat events:
 - Messages sent to the Bot: replies with the same message appending 'to you'
 - Files shared with the Bot: tries to parse the date of the document, if successful uploads it to Dropbox
@@ -166,5 +185,6 @@ def _handle_message(event_json):
         _logger.debug('message event with no text or no user %s', event_json)
         return '???'
 
-    slack.send_message(event_json['channel'], f'{text} to you')
+    if not text.startswith('/'):
+        slack.send_message(event_json['channel'], f'{text} to you')
     return 'ok'
