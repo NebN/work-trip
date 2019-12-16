@@ -35,3 +35,55 @@ def max_day_of_month(date):
     # returned = (2019/03/04 - 4).day = (2019/02/28).day = 28
     following_month_date = date.replace(day=1) + timedelta(days=31)
     return (following_month_date - timedelta(following_month_date.day)).day
+
+
+def dates_in_year_month(year, month):
+    return [date(year, month, n) for n in range(1, max_day_of_month(date(year, month, 1)) + 1)]
+
+
+def dates_in_previous_year_month():
+    today = date.today()
+    last_month_today = minus_months(today, 1)
+    return dates_in_year_month(last_month_today.year, last_month_today.month)
+
+
+def dates_in_current_year_month():
+    today = date.today()
+    year = today.year
+    month = today.month
+    max_day = today.day
+    return [date(year, month, n) for n in range(1, max_day + 1)]
+
+
+def month_from_string(text):
+    if len(text) < 3:
+        return None
+    s = text[0:3].lower()
+    if s == 'cur' or s == 'att':
+        return date.today().month
+    if s == 'jan' or s == 'gen':
+        return 1
+    if s == 'feb':
+        return 2
+    if s == 'mar':
+        return 3
+    if s == 'apr':
+        return 4
+    if s == 'may' or s == 'mag':
+        return 5
+    if s == 'jun' or s == 'giu':
+        return 6
+    if s == 'jul' or s == 'lug':
+        return 7
+    if s == 'aug' or s == 'ago':
+        return 8
+    if s == 'sep' or s == 'set':
+        return 9
+    if s == 'oct' or s == 'ott':
+        return 10
+    if s == 'nov':
+        return 11
+    if s == 'dec' or s == 'dic':
+        return 12
+
+

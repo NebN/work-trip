@@ -1,7 +1,7 @@
 import unittest
 from datetime import date
+
 from src.parsing import *
-from src.util import dateutil
 
 
 class ParsingTests(unittest.TestCase):

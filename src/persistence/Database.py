@@ -1,7 +1,9 @@
-import psycopg2
 import os
+import psycopg2
 from src import log
 from src.model import *
+from src.api import slack
+from . import documents
 
 
 class Database:
@@ -63,16 +65,18 @@ class Database:
         cur = self._conn.cursor()
         cur.execute('SELECT id, employee_user_id, payed_on, amount, description, proof_url '
                     'FROM expense '
-                    'WHERE employee_user_id = %s AND payed_on BETWEEN %s AND %s',
+                    'WHERE employee_user_id = %s AND payed_on BETWEEN %s AND %s '
+                    'ORDER BY payed_on ASC',
                     (user_id, date_from, to))
         res = cur.fetchall()
         self.logger.debug('Expenses found %s', res)
         return [Expense(id=r[0], employee_user_id=r[1], payed_on=r[2], amount=r[3], description=r[4], proof_url=r[5])
                 for r in res]
 
-    def add_employee_if_not_exists(self, user_id, user_name):
+    def add_employee_if_not_exists(self, user_id, user_name=None):
         if not self.get_employee(user_id):
-            employee = Employee(user_id, user_name)
+            name = user_name if user_name else slack.user_info(user_id)['name']
+            employee = Employee(user_id, name)
             self.logger.debug('adding new Employee following request: %s', employee)
             self.add_employee(employee)
 
@@ -103,8 +107,16 @@ class Database:
                      expense.description, expense.proof_url))
         return cur.fetchone()[0]
 
-    def delete_expense(self, expense_id):
+    def delete_expense_with_id(self, expense_id):
+        expense = self.get_expense(expense_id)
+        return self.delete_expense(expense)
+
+    def delete_expense(self, expense):
         cur = self._conn.cursor()
-        self.logger.info('deleting expense with id %s', expense_id)
-        cur.execute('DELETE FROM expense WHERE id = %s', (expense_id,))
+        self.logger.info('deleting expense with id %s', expense.id)
+        cur.execute('DELETE FROM expense WHERE id = %s', (expense.id,))
+
+        if expense.proof_url:
+            documents.delete(expense.proof_url)
+
         return cur.statusmessage.endswith('1')

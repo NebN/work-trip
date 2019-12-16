@@ -1,9 +1,12 @@
 import re
-from datetime import date
+import io
+import locale
+from datetime import date, datetime
+
 from src.model import Expense
 from src.util import dateutil
 from .IncrementalParser import IncrementalParser
-
+from .file_to_text import file_to_text
 
 def parse_email_address(text):
     pattern = '''.*?(\S+@\S+\.\S+).*'''
@@ -26,14 +29,14 @@ def parse_expense(text):
     if amount_search:
         amount = amount_search[0]
         try:
-            payed_on = interpret_day(date_search[0]) if date_search else date.today()
+            payed_on = _interpret_day(date_search[0]) if date_search else date.today()
         except ValueError:
             return None
         description = description_search[0] if description_search else None
         return Expense(employee_user_id=None, payed_on=payed_on, amount=amount, description=description)
 
 
-def interpret_day(text):
+def _interpret_day(text):
     day_pattern = '''\s*(\d{1,2})[/-]?(\d{1,2})?\s*'''
     ip = IncrementalParser(text)
     day_search = ip.extract(day_pattern)
@@ -46,3 +49,27 @@ def interpret_day(text):
             return dateutil.last_date_of_day(day)
 
 
+def parse_expense_from_file(path):
+    text = file_to_text(path)
+
+    # Trenord
+    # 10 dic 2019
+
+    # Trenitalia
+    # Ore 19:37 - 13/12/2019
+
+    if text:
+        found_trenitalia = re.search('''Ore \d{2}:\d{2}\s-\s(\d{2}/\d{2}/\d{4})''', text)
+        if found_trenitalia:
+            date_time = datetime.strptime(found_trenitalia.group(1), '%d/%m/%Y')
+            amount = re.search(''': (\d{1,2}\.\d{2}) €''', text).group(1)
+            description = 'Trenitalia ticket'
+            return Expense(employee_user_id=None, payed_on=date_time.date(), amount=amount, description=description)
+
+        found_trenord = re.search('''(\d{2}\s\w{3}\s\d{4})''', text)
+        if found_trenord:
+            locale.setlocale(locale.LC_ALL, 'it_IT.utf8')
+            date_time = datetime.strptime(found_trenord.group(1), '%d %b %Y')
+            amount = re.search('''(\d{1,2},\d{2}) €''', text).group(1).replace(',', '.')
+            description = 'Trenord ticket'
+            return Expense(employee_user_id=None, payed_on=date_time.date(), amount=amount, description=description)

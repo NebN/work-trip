@@ -1,8 +1,9 @@
-import email
 import datetime
+import email
 import os
+
 from src import log
-from .Pdf import Pdf
+from src import parsing
 
 
 class Email:
@@ -46,8 +47,7 @@ class Email:
                 else:
                     self.logger.warn('attachment already downloaded to %s', file_path)
 
-                pdf = Pdf(file_path)
-                pdf.find()
+                print(parsing.parse_expense_from_file(file_path))
             else:
                 self.logger.info('not downloading file because not allowed: %s, allowed extensions: %s',
                                  filename, allowed_files)

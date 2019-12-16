@@ -12,7 +12,7 @@ class Employee:
 @dataclass
 class Email:
     address: str  # Primary key
-    employee_user_id: str  # referenced Employee (user_id)
+    employee_user_id: str  # references Employee (user_id)
     verified: bool = False
 
 
