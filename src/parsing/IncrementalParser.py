@@ -16,7 +16,7 @@ class IncrementalParser:
     All the text that matches the pattern is then removed for the next call to 'extract'.
     '''
     def extract(self, pattern):
-        res = re.search(pattern, self._text)
+        res = re.match(pattern, self._text)
         if res:
             matches = list(map(lambda x: res.group(x), range(1, len(res.groups()) + 1)))
             for match in matches:

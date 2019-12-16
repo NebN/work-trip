@@ -50,3 +50,10 @@ class ParsingTests(unittest.TestCase):
         self.assertEqual(expense.payed_on, last_date_with_day_24)
         self.assertEqual(expense.description, 'some description')
 
+    def test_parse_expense_weird_cases(self):
+        expense1 = parse_expense('24/12 some description')
+        self.assertEqual('/12 some description', expense1.description)
+
+        expense2 = parse_expense('24 some description')
+        self.assertEqual(date.today(), expense2.payed_on)
+        self.assertEqual('some description', expense2.description)
