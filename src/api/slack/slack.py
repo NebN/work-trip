@@ -4,11 +4,12 @@ import requests
 from flask import jsonify
 
 from src.log import logging
+from .Button import Button
 
 _logger = logging.get_logger(__name__)
 
 
-def respond(text):
+def in_channel(text):
     return jsonify(
         response_type='in_channel',
         text=text
@@ -22,33 +23,52 @@ def ephemeral(text):
     )
 
 
-def monospaced(text, title=None):
-    t = f'{title}\n' if title else ''
+def respond_expense_added(expense):
+    expense_string = f'*Amount:* {expense.amount}\n' \
+                     f'*Date:* {expense.payed_on}\n'
+
+    if expense.description:
+        expense_string = expense_string + f'*Description*: {expense.description}'
+
     return jsonify(
         response_type='in_channel',
-        blocks=[{
-            'type': 'section',
-            'text': {
-                'type': 'mrkdwn',
-                'text': f'{t}```{text}```'
-            }
-        }]
+        blocks=[
+            _text_section('*Expense added.*'),
+            _text_section(expense_string),
+            _buttons(
+                Button(text='Delete', value=f'delete {expense.id}', style='danger')
+            )
+        ]
+    )
+
+
+def respond_recap(year_month, expenses_table):
+    return jsonify(
+        response_type='in_channel',
+        blocks=[
+            _text_section(f'*Recap for {year_month}*'),
+            _text_section(f'```{expenses_table}```'),
+            _buttons(
+                Button(text='Download Attachments', value=f'download {year_month}', style='primary'),
+                Button(text='Destroy the Planet', value='destroy', style='danger')
+            )
+        ]
     )
 
 
 def send_message(target, text):
     req_url = 'https://slack.com/api/chat.postMessage'
     params = {
-        "token": os.environ['BOT_USER_OAUTH_TOKEN'],
-        "channel": target,
-        "text": text,
+        'token': os.environ['BOT_USER_OAUTH_TOKEN'],
+        'channel': target,
+        'text': text,
     }
     resp = requests.get(req_url, params=params)
     resp_json = resp.json()
     if not resp.ok or not resp_json['ok']:
         _logger.error(f'could not send message %s to %s, response=%s', text, target, resp_json)
     else:
-        _logger.debug('sent message %s to %s, ephemeral=%s', text, target, ephemeral)
+        _logger.debug('sent message %s to %s, ephemeral=%s', text, target, 'False')
 
 
 def download_file(file_id):
@@ -91,9 +111,9 @@ def upload_file(file_path, channel_id, description):
         }
 
         params = {
-            "token": os.environ['BOT_USER_OAUTH_TOKEN'],
-            "initial_comment": description,
-            "channels": [channel_id],
+            'token': os.environ['BOT_USER_OAUTH_TOKEN'],
+            'initial_comment': description,
+            'channels': [channel_id],
         }
 
         _logger.debug('uploading file %s', file_path)
@@ -110,8 +130,8 @@ def upload_file(file_path, channel_id, description):
 def user_info(user_id):
     req_url = f'https://slack.com/api/users.info'
     params = {
-        "token": os.environ['BOT_USER_OAUTH_TOKEN'],
-        "user": user_id,
+        'token': os.environ['BOT_USER_OAUTH_TOKEN'],
+        'user': user_id,
     }
 
     _logger.debug('requesting info on %s', user_id)
@@ -123,3 +143,38 @@ def user_info(user_id):
         return None
     else:
         return resp_json['user']
+
+
+def _text_section(text):
+    return {
+        'type': 'section',
+        'text': {
+            'text': text,
+            'type': 'mrkdwn'
+        }
+    }
+
+
+def _buttons(*bs):
+    return {
+        'type': 'actions',
+        'elements': [_button(b) for b in bs]
+    }
+
+
+def _button(b):
+    button_dict = {
+        'type': 'button',
+        'style': b.style,
+        'value': b.value,
+        'text': {
+            'type': 'plain_text',
+            'emoji': True,
+            'text': b.text
+        }
+    }
+
+    if b.style:
+        button_dict['style'] = b.style
+
+    return button_dict

@@ -19,21 +19,21 @@ def last_date_of_day_month(day_number, month_number):
     return computed_date
 
 
-def minus_months(date, months):
-    computed_date = date
+def minus_months(d, months):
+    computed_date = d
     for n in range(0, months):
         computed_date = (computed_date.replace(day=1) - timedelta(days=1))
 
     max_day = max_day_of_month(computed_date)
-    return computed_date.replace(day=min(max_day, date.day))
+    return computed_date.replace(day=min(max_day, d.day))
 
 
-def max_day_of_month(date):
+def max_day_of_month(d):
     # example:
     # date = 2019/02/15
     # following_month = 2019/02/1 + 31 days = 2019/03/04
     # returned = (2019/03/04 - 4).day = (2019/02/28).day = 28
-    following_month_date = date.replace(day=1) + timedelta(days=31)
+    following_month_date = d.replace(day=1) + timedelta(days=31)
     return (following_month_date - timedelta(following_month_date.day)).day
 
 

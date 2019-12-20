@@ -18,9 +18,12 @@ class Email:
 
 @dataclass
 class Expense:
-    employee_user_id: str
     payed_on: date
     amount: str
     description: str = None
     proof_url: str = None
-    id: int = None
+    employee_user_id: str = None
+    id: int = None  # Primary Key
+
+    def __repr__(self):
+        return f'id={self.id} date={self.payed_on} amount={self.amount} {self.description}'

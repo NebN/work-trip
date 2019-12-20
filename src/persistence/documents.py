@@ -6,6 +6,7 @@ from src.log import logging
 _logger = logging.get_logger(__name__)
 _dbox = dropbox.Dropbox(os.getenv('DROPBOX_ACCESS_TOKEN'))
 
+
 def upload(filename, save_path):
     with open(filename, 'rb') as f:
         try:
@@ -21,6 +22,7 @@ def download(path):
     with open(download_path, 'wb') as file:
         file.write(res.content)
     return download_path
+
 
 def delete(path):
     try:

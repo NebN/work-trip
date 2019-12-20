@@ -1,12 +1,14 @@
-import re
-import io
 import locale
+import re
+from functools import partial
 from datetime import date, datetime
 
 from src.model import Expense
 from src.util import dateutil
+from src.api.slack import actions
 from .IncrementalParser import IncrementalParser
 from .file_to_text import file_to_text
+
 
 def parse_email_address(text):
     pattern = '''.*?(\S+@\S+\.\S+).*'''
@@ -20,6 +22,8 @@ def parse_email_address(text):
 /add 28.5 15        # adds an expense of €28.50 to the last 15th of the month
 /add 28.5 15/11     # adds an expense of €28.50 to the last 15th of November
 '''
+
+
 def parse_expense(text):
     ip = IncrementalParser(text)
     amount_search = ip.extract('''(\d+(?:[\.,]\d+)?)''')
@@ -33,7 +37,26 @@ def parse_expense(text):
         except ValueError:
             return None
         description = description_search[0] if description_search else None
-        return Expense(employee_user_id=None, payed_on=payed_on, amount=amount, description=description)
+        return Expense(payed_on=payed_on, amount=amount, description=description)
+
+
+def parse_action(text):
+    ip = IncrementalParser(text)
+    action_search = ip.extract('''(\w+)''')
+    if action_search:
+        action_name = action_search[0]
+        if action_name == 'download':
+            year, month = ip.extract('''(\d{4})-(\d{2})''')
+
+            date_start = date(int(year), int(month), 1)
+            date_end = date_start.replace(day=dateutil.max_day_of_month(date_start))
+
+            return partial(actions.download_files, date_start=date_start, date_end=date_end)
+
+        elif action_name == 'delete':
+            expense_id = ip.extract('''(\d+)''')[0]
+            print(expense_id)
+            return partial(actions.delete_expense, expense_id=expense_id)
 
 
 def _interpret_day(text):
@@ -64,7 +87,7 @@ def parse_expense_from_file(path):
             date_time = datetime.strptime(found_trenitalia.group(1), '%d/%m/%Y')
             amount = re.search(''': (\d{1,2}\.\d{2}) €''', text).group(1)
             description = 'Trenitalia ticket'
-            return Expense(employee_user_id=None, payed_on=date_time.date(), amount=amount, description=description)
+            return Expense(payed_on=date_time.date(), amount=amount, description=description)
 
         found_trenord = re.search('''(\d{2}\s\w{3}\s\d{4})''', text)
         if found_trenord:
@@ -72,4 +95,4 @@ def parse_expense_from_file(path):
             date_time = datetime.strptime(found_trenord.group(1), '%d %b %Y')
             amount = re.search('''(\d{1,2},\d{2}) €''', text).group(1).replace(',', '.')
             description = 'Trenord ticket'
-            return Expense(employee_user_id=None, payed_on=date_time.date(), amount=amount, description=description)
+            return Expense(payed_on=date_time.date(), amount=amount, description=description)

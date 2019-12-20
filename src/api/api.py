@@ -1,5 +1,6 @@
 import os
 import threading
+import json
 from datetime import date
 
 from flask import Flask, request
@@ -13,7 +14,7 @@ from src.model import Email
 from src.persistence import Database
 from src.persistence import documents
 from src.util import dateutil
-from . import slack
+from .slack import slack
 
 api = Flask(__name__)
 _logger = logging.get_logger(__name__)
@@ -26,7 +27,7 @@ def get():
 
 @api.route('/', methods=['POST'])
 def post():
-    return slack.respond(f'hello {request.values["user_name"]}')
+    return slack.in_channel(f'hello {request.values["user_name"]}')
 
 
 @api.route('/register', methods=['POST'])
@@ -45,13 +46,13 @@ def register():
     address = parsing.parse_email_address(text)
     _logger.debug(f'register {text}')
     if not address:
-        return slack.respond(f'email not found in {text}')
+        return slack.in_channel(f'email not found in {text}')
     else:
         with Database() as db:
             existing_email = db.get_email(address)
             if existing_email:
                 _logger.debug('email %s already exists %s verified status=%s', address, existing_email.verified)
-                return slack.respond(f'{address} already registered, verified status={existing_email.verified}')
+                return slack.in_channel(f'{address} already registered, verified status={existing_email.verified}')
             user_id = request.values['user_id']
             db.add_employee_if_not_exists(user_id, request.values['user_name'])
 
@@ -63,7 +64,7 @@ def register():
             _logger.debug('verification link %s', verification_link)
             sender.send_message(to_address=address, subj='TrasfertaBot verification',
                                 message=f'click the following link to verify your address\n{verification_link}')
-            return slack.respond(f'email registered, please click the verification link sent to {address}')
+            return slack.in_channel(f'email registered, please click the verification link sent to {address}')
 
 
 @api.route('/confirm/<token>')
@@ -96,6 +97,8 @@ Usages:
 /add 28.5 15        # adds an expense of €28.50 to the last 15th of the month
 /add 28.5 15/11     # adds an expense of €28.50 to the last 15th of November
 '''
+
+
 @api.route('/add', methods=['POST'])
 def add():
     text = request.values['text']
@@ -103,38 +106,37 @@ def add():
     if expense:
         with Database() as db:
             user_id = request.values['user_id']
-            db.add_employee_if_not_exists(user_id,  request.values['user_name'])
+            db.add_employee_if_not_exists(user_id, request.values['user_name'])
             expense.employee_user_id = user_id
             expense_id = db.add_expense(expense)
-        return slack.respond(f'Expense added. Amount={expense.amount}, date={expense.payed_on}'
-                             f'{f", description={expense.description}" if expense.description else ""}. '
-                             f'If you wish to delete the expense use `/delete {expense_id}`.')
+            expense.id = expense_id
+            return slack.respond_expense_added(expense)
     else:
-        return slack.respond('Could not parse expense information from your message. '
-                             'Valid formats include:\n'
-                             '/add 28.5\n'
-                             '/add 28.5 15\n'
-                             '/add 28.5 15/11\n'
-                             'You can always add a description at the end of the message.')
+        return slack.in_channel('Could not parse expense information from your message. '
+                                'Valid formats include:\n'
+                                '/add 28.5\n'
+                                '/add 28.5 15\n'
+                                '/add 28.5 15/11\n'
+                                'You can always add a description at the end of the message.')
 
 
 '''
 Deletes an expense with given id.
 '''
+
+
 @api.route('/delete', methods=['POST'])
 def delete():
     expense_id = request.values['text'].strip()
     with Database() as db:
         expense = db.get_expense(expense_id)
         if not expense:
-            return slack.respond(f'No expense with id {expense_id} found.')
+            return slack.in_channel(f'No expense with id {expense_id} found.')
         if expense.employee_user_id != request.values['user_id']:
-            return slack.respond(f'This expense does not belong to you ({request.values["user_name"]}).')
+            return slack.in_channel(f'This expense does not belong to you ({request.values["user_name"]}).')
         if db.delete_expense(expense):
-            return slack.respond(f'Expense [{expense.amount} {expense.payed_on}'
-                                 f'{f"{ expense.description}" if expense.description else ""}] '
-                                 f'deleted successfully.')
-        return slack.respond('Something went wrong while deleting the expense.')
+            return slack.in_channel(f'Expense [{expense}] deleted successfully.')
+        return slack.in_channel('Something went wrong while deleting the expense.')
 
 
 '''
@@ -145,6 +147,8 @@ Usage:
 /recap current  # sends the recap for the current month
 /recap          # sends the recap for the previous month
 '''
+
+
 @api.route('/recap', methods=['POST'])
 def recap():
     text = request.values['text'].strip()
@@ -155,7 +159,7 @@ def recap():
     else:
         month = dateutil.month_from_string(text)
         if not month:
-            return slack.respond(f'Sorry, could not understand month from {text}')
+            return slack.in_channel(f'Sorry, could not understand month from {text}')
 
     with Database() as db:
         start = dateutil.last_date_of_day_month(1, month)
@@ -189,8 +193,7 @@ def recap():
                 table.add_row([e.id, e.payed_on.strftime('%d'), e.amount,
                                e.description if e.description else '', e.proof_url is not None])
 
-        return slack.monospaced(table, title=f'Recap for {start.strftime("%Y-%m")}\n'
-                                             f'Use `/recap <month> files` to obtain the attachments.')
+        return slack.respond_recap(start.strftime("%Y-%m"), table)
 
 
 @api.route('/info', methods=['POST'])
@@ -265,6 +268,24 @@ def event():
 
     # we are required to respond immediately to /event requests
     # or slack will send another request
+    return 'ok'
+
+
+@api.route('/action', methods=['POST'])
+def action():
+    payload = json.loads(request.values['payload'])
+    _logger.info(payload)
+
+    user_id = payload['user']['id']
+    channel_id = payload['channel']['id']
+    action_requests = payload['actions']
+
+    actions = [parsing.parse_action(req['value']) for req in action_requests]
+    threads = [threading.Thread(target=a, args=(user_id, channel_id)) for a in actions]
+
+    for t in threads:
+        t.start()
+
     return 'ok'
 
 
