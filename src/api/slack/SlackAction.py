@@ -42,7 +42,17 @@ class DownloadAttachments(SlackAction):
                                      f'No attachments found between {self.date_start} and {self.date_end}')
             else:
                 for exp in expenses:
-                    file_path = documents.download(exp.proof_url)
-                    slack.upload_file(file_path, channel_id,
-                                      description=f'id={exp.id} {exp.payed_on} {exp.amount} {exp.description}')
+                    shared = slack.file_share(channel_id=channel_id, external_id=exp.external_id)
+                    if not shared:
+                        file_path = documents.download(exp.proof_url)
+                        title = str(exp)
+                        file_id = slack.file_upload(file_path, channel_id, description=title)
+                        external_id = slack.file_add(title=title, file_id=file_id)
+                        exp.external_id = external_id
+                        db.update_expense(exp)
 
+
+class DestroyPlanet(SlackAction):
+    def execute(self, user_id, channel_id, response_url):
+        slack.post_message(channel_id, 'Not yet implemented, enjoy this video instead.'
+                                       '\nhttps://www.youtube.com/watch?v=izhGLGPmvIU&feature=youtu.be&t=88')

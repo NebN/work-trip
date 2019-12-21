@@ -22,8 +22,9 @@ class Expense:
     amount: str
     description: str = None
     proof_url: str = None
+    external_id: str = None
     employee_user_id: str = None
     id: int = None  # Primary Key
 
     def __repr__(self):
-        return (f'[{self.id}] ' if self.id else '') + f'{self.payed_on} €{self.amount} {self.description}'
+        return (f'*[{self.id}] ' if self.id else '*') + f'{self.payed_on} €{self.amount} {self.description}*'

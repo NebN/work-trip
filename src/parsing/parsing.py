@@ -4,7 +4,7 @@ from datetime import date, datetime
 
 from src.model import Expense
 from src.util import dateutil
-from src.api.slack import DownloadAttachments, DeleteExpense
+from src.api.slack import DownloadAttachments, DeleteExpense, DestroyPlanet
 from .IncrementalParser import IncrementalParser
 from .file_to_text import file_to_text
 
@@ -78,6 +78,9 @@ def parse_action(text):
     elif action_name == 'delete':
         expense_id = ip.extract('''(\d+)''')[0]
         return DeleteExpense(expense_id=expense_id)
+
+    elif action_name == 'destroy':
+        return DestroyPlanet()
 
 
 def _interpret_day(text):

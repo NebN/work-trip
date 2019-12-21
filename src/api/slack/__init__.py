@@ -1,4 +1,4 @@
 from . import slack
 from .SlackAction import *
 
-__all__ = ['slack', 'DownloadAttachments', 'DeleteExpense']
+__all__ = ['slack', 'DownloadAttachments', 'DeleteExpense', 'DestroyPlanet']

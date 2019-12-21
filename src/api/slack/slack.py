@@ -1,4 +1,5 @@
 import os
+import hashlib
 
 import requests
 from flask import jsonify
@@ -22,6 +23,23 @@ def ephemeral(text):
         text=text
     )
 
+
+def update(channel_id, ts, text):
+    req_url = 'https://slack.com/api/chat.update'
+    params = {
+        'token': os.environ['BOT_USER_OAUTH_TOKEN'],
+        'channel': channel_id,
+        'text': text,
+        'ts': ts
+    }
+    resp = requests.get(req_url, params=params)
+    resp_json = resp.json()
+    if not resp.ok or not resp_json['ok']:
+        _logger.error(f'could not update message %s %s with %s, response=%s', channel_id, ts, text, resp_json)
+    else:
+        _logger.error(f'updated message %s %s with %s', channel_id, ts, text)
+
+
 def replace_original(text, url):
     payload = {
         'replace_original': 'true',
@@ -39,7 +57,7 @@ def respond_expense_added(expense):
     return jsonify(
         response_type='in_channel',
         blocks=[
-            _text_section(f'*Expense added.*\n{expense}'),
+            _text_section(f'Added {expense}'),
             _buttons(
                 Button(text='Delete', value=f'delete {expense.id}', style='danger')
             )
@@ -91,9 +109,10 @@ def post_message(channel_id, text):
         _logger.error(f'could not post message %s to %s, response=%s', text, channel_id, resp_json)
     else:
         _logger.debug('posted message %s to %s', text, channel_id)
+        return resp_json['message']['ts']
 
 
-def download_file(file_id):
+def file_info(file_id):
     req_url = f'https://slack.com/api/files.info'
     token = os.environ['BOT_USER_OAUTH_TOKEN']
     params = {
@@ -109,23 +128,30 @@ def download_file(file_id):
         _logger.warn('cannot request file link, response=%s', resp)
         return None
     else:
-        download_url = resp_json['file']['url_private_download']
-        filename = resp_json['file']['name']
-
-        _logger.debug('downloading file %s from %s', filename, download_url)
-
-        file_resp = requests.get(download_url, headers={'Authorization': 'Bearer ' + token})
-        if not resp.ok:
-            _logger.warn('cannot download file, response=%s', resp_json)
-            return None
-        else:
-            with open(filename, 'wb') as file:
-                file.write(file_resp.content)
-
-        return filename
+        return resp_json['file']
 
 
-def upload_file(file_path, channel_id, description):
+def download_file(file_id):
+    info = file_info(file_id)
+    download_url = info['url_private_download']
+    filename = info['name']
+
+    _logger.debug('downloading file %s from %s', filename, download_url)
+
+    token = os.environ['BOT_USER_OAUTH_TOKEN']
+    resp = requests.get(download_url, headers={'Authorization': 'Bearer ' + token})
+    resp_json = resp.json()
+    if not resp.ok or not resp_json['ok']:
+        _logger.warn('cannot download file, response=%s', resp_json)
+        return None
+    else:
+        with open(filename, 'wb') as file:
+            file.write(resp.content)
+
+    return filename
+
+
+def file_upload(file_path, channel_id, description):
     req_url = f'https://slack.com/api/files.upload'
     with open(file_path, 'rb') as f:
         file = {
@@ -142,11 +168,62 @@ def upload_file(file_path, channel_id, description):
 
         resp = requests.post(req_url, params=params, files=file)
         resp_json = resp.json()
-        if not resp.ok:
+        if not resp.ok or not resp_json['ok']:
             _logger.warn('cannot upload file, response=%s', resp_json)
             return None
         else:
-            return resp_json['file']['url_private']
+            return resp_json['file']['id']
+
+
+def file_add(title, file_id, file_bytes=None):
+    token = os.environ['BOT_USER_OAUTH_TOKEN']
+    info = file_info(file_id)
+
+    if file_bytes is None:
+        download_url = info['url_private_download']
+        file_resp = requests.get(download_url, headers={'Authorization': 'Bearer ' + token})
+        file_bytes = file_resp.content
+
+    url = info['url_private']
+    external_id = hashlib.md5(file_bytes).hexdigest()
+
+    req_url = 'https://slack.com/api/files.remote.add'
+    params = {
+        'token': os.environ['BOT_USER_OAUTH_TOKEN'],
+        'external_url': url,
+        'external_id': external_id,
+        'title': title
+    }
+
+    resp = requests.get(req_url, params=params)
+    resp_json = resp.json()
+
+    if not resp.ok or not resp_json['ok']:
+        _logger.warn('cannot add file, response=%s', resp_json)
+        return None
+    else:
+        return external_id
+
+
+def file_share(channel_id, external_id):
+    req_url = 'https://slack.com/api/files.remote.share'
+
+    params = {
+        'token': os.environ['BOT_USER_OAUTH_TOKEN'],
+        'channels': channel_id,
+        'external_id': external_id
+    }
+
+    _logger.debug('sharing file %s to %s', external_id, channel_id)
+
+    resp = requests.get(req_url, params=params)
+    resp_json = resp.json()
+
+    if not resp.ok or not resp_json['ok']:
+        _logger.warn('cannot share file, response=%s', resp_json)
+        return False
+    else:
+        return True
 
 
 def user_info(user_id):

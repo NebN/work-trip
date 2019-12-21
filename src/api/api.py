@@ -120,39 +120,40 @@ def add():
                                 'You can always add a description at the end of the message.')
 
 
-'''
-Deletes an expense with given id.
-'''
-
-
 @api.route('/delete', methods=['POST'])
 def delete():
-    expense_id = request.values['text'].strip()
+    """
+    Deletes an expense (or list of expenses) with given id.
+    """
+    expense_ids = [ex_id.strip() for ex_id in request.values['text'].strip().split(',')]
     with Database() as db:
-        expense = db.get_expense(expense_id)
-        if not expense:
-            return slack.in_channel(f'No expense with id {expense_id} found.')
-        if expense.employee_user_id != request.values['user_id']:
-            return slack.in_channel(f'This expense does not belong to you ({request.values["user_name"]}).')
-        if db.delete_expense(expense):
-            return slack.in_channel(f'Expense [{expense}] deleted successfully.')
-        return slack.in_channel('Something went wrong while deleting the expense.')
+        responses = []
+        for expense_id in expense_ids:
+            expense = db.get_expense(expense_id)
+            if not expense:
+                responses.append(f'No expense with id {expense_id} found.')
+            if expense.employee_user_id != request.values['user_id']:
+                responses.append(f'The expense with id {expense_id} '
+                                 f'does not belong to you ({request.values["user_name"]}).')
+            if db.delete_expense(expense):
+                responses.append(f'Expense {expense} deleted successfully.')
+            else:
+                responses.append('Something went wrong while deleting the expense.')
 
-
-'''
-Sends a recap of the desired month if specified, of last month if not.
-
-Usage:
-/recap october  # sends the recap for October
-/recap current  # sends the recap for the current month
-/recap          # sends the recap for the previous month
-'''
+        return "\n".join(responses)
 
 
 @api.route('/recap', methods=['POST'])
 def recap():
+    """
+    Sends a recap of the desired month if specified, of last month if not.
+
+    Usage:
+    /recap october  # sends the recap for October
+    /recap current  # sends the recap for the current month
+    /recap          # sends the recap for the previous month
+    """
     text = request.values['text'].strip()
-    download_files = 'files' in text.lower()
 
     if len(text) == 0:
         month = dateutil.minus_months(date.today(), 1).month
@@ -167,31 +168,11 @@ def recap():
         user_id = request.values['user_id']
         expenses = db.get_expenses(user_id, start, end)
 
-        if download_files:
-            expenses_with_files = list(filter(lambda x: x.proof_url is not None, expenses))
-            _logger.debug(f'expenses_with_files: {len(expenses_with_files)}')
-            if len(expenses_with_files) == 0:
-                return slack.ephemeral(f'No files to send for {start.strftime("%Y-%m")}.')
-
-            channel_id = request.values['channel_id']
-
-            def _download():
-                for exp in expenses_with_files:
-                    file_path = documents.download(exp.proof_url)
-                    slack.upload_file(file_path, channel_id,
-                                      description=f'id={exp.id} {exp.payed_on} {exp.amount} {exp.description}')
-
-            t = threading.Thread(target=_download)
-            t.start()
-
-            return slack.ephemeral(f'Sending files for {start.strftime("%Y-%m")}...\n')
-
-        else:
-            table = PrettyTable()
-            table.field_names = ['id', 'date', 'amount', 'description', 'has attachment']
-            for e in expenses:
-                table.add_row([e.id, e.payed_on.strftime('%d'), e.amount,
-                               e.description if e.description else '', e.proof_url is not None])
+        table = PrettyTable()
+        table.field_names = ['id', 'date', 'amount', 'description', 'has attachment']
+        for e in expenses:
+            table.add_row([e.id, e.payed_on.strftime('%d'), e.amount,
+                           e.description if e.description else '', e.proof_url is not None])
 
         return slack.respond_recap(start.strftime("%Y-%m"), table)
 
@@ -210,24 +191,25 @@ def info():
               'Adds an expense to a date if specified, to today if not.\n' \
               'A description can also be added.\n' \
               'Usages:\n' \
-              '`/add 28.5`           # adds an expense of €28.50 to today\n' \
-              '`/add 28.5 15`        # adds an expense of €28.50 to the last 15th of the month\n' \
-              '`/add 28.5 15/11`     # adds an expense of €28.50 to the last 15th of November\n' \
+              '`/add 28.5 description (optional)` \nadds an expense of €28.50 to today with a description\n' \
+              '`/add 28.5 15`\nadds an expense of €28.50 to the last 15th of the month\n' \
+              '`/add 28.5 15/11`\nadds an expense of €28.50 to the last 15th of November\n' \
               '\n' \
               '>/delete\n' \
               'Deletes the expense with given id\n' \
               'Usages:\n' \
               '`/delete 42`\n' \
+              '`/delete 42,43,44`\n' \
               '\n' \
               '>/recap\n' \
               'Sends a recap of the desired month if specified, of last month if not. ' \
               '(Month can be shortened to it\'s first 3 letters, e.g.: Oct)\n' \
               'Usages:\n' \
-              '`/recap oct(ober)` # sends the recap for October\n' \
-              '`/recap cur(rent)` # sends the recap for the current month\n' \
-              '`/recap`           # sends the recap for the previous month\n' \
+              '`/recap oct(ober)`\nsends the recap for October\n' \
+              '`/recap cur(rent)`\nsends the recap for the current month\n' \
+              '`/recap`\nsends the recap for the previous month\n' \
               '\n' \
-              'In addition to these commands you can upload a file representing an expense, ' \
+              '*In addition to these commands you can upload a file representing an expense*, ' \
               'this will have the same effect as `/add` if the file is supported'
 
     return message
@@ -246,21 +228,22 @@ def event():
     if challenge:
         return challenge
 
+    _logger.debug('request json %s' % request.get_json())
+
     event_json = request.get_json()['event']
     event_type = event_json['type']
+    event_subtype = event_json.get('subtype')
 
-    if event_json.get('subtype') == 'bot_message':
-        return 'bot_message: no_op'
+    if event_subtype in ['bot_message', 'message_deleted']:
+        return 'no_op'
     if event_json.get('user_id') == os.getenv('BOT_USER_ID') or event_json.get('user') == os.getenv('BOT_USER_ID'):
         return 'bot_message: no_op'
-
-    _logger.debug('request json %s' % request.get_json())
 
     handler = _empty_handler
 
     if event_type == 'file_shared':
         handler = _handle_file_shared
-    elif event_type == 'message':
+    elif event_type == 'message' and event_subtype not in ['message_changed', 'file_share']:
         handler = _handle_message
 
     t = threading.Thread(target=handler, args=(event_json,))
@@ -291,32 +274,37 @@ def action():
 
 
 def _handle_file_shared(event_json):
-    slack.post_message(event_json['channel_id'], 'Processing file...')
+    ts = slack.post_message(event_json['channel_id'], 'Processing file...')
 
     file_id = event_json['file_id']
     file_path = slack.download_file(file_id)
     expense = parsing.parse_expense_from_file(file_path)
     if not expense:
-        return slack.post_message(event_json['channel_id'],
-                                  'Sorry, this kind of file is not supported. '
-                                  'Currently supported files are:\n'
-                                  '- Trenitalia ticket\n'
-                                  '- Trenord ticket\n')
+        return slack.update(event_json['channel_id'], ts,
+                            'Sorry, this kind of file is not supported. '
+                            'Currently supported files are:\n'
+                            '- Trenitalia ticket\n'
+                            '- Trenord ticket\n')
 
     user_id = event_json['user_id']
     proof_url = documents.upload(file_path, f'{user_id}/{expense.payed_on}')
+    with open(file_path, 'rb') as f:
+        external_id = slack.file_add(title=str(expense), file_id=file_id, file_bytes=f.read())
 
-    if not proof_url:
-        return slack.post_message(event_json['channel_id'],
-                                  'Sorry, there was a problem uploading the file')
+    if not proof_url or not external_id:
+        return slack.update(event_json['channel_id'], ts,
+                            'Sorry, there was a problem uploading the file')
 
     expense.employee_user_id = user_id
     expense.proof_url = proof_url
+    expense.external_id = external_id
+
     with Database() as db:
         db.add_employee_if_not_exists(user_id)
         db.add_expense(expense)
 
-    slack.respond_expense_added(expense)
+    return slack.update(event_json['channel_id'], ts,
+                        f'Expense added {expense}')
 
 
 def _handle_message(event_json):
