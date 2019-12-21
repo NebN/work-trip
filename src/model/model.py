@@ -26,4 +26,4 @@ class Expense:
     id: int = None  # Primary Key
 
     def __repr__(self):
-        return f'id={self.id} date={self.payed_on} amount={self.amount} {self.description}'
+        return (f'[{self.id}] ' if self.id else '') + f'{self.payed_on} €{self.amount} {self.description}'

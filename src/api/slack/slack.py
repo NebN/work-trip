@@ -22,19 +22,24 @@ def ephemeral(text):
         text=text
     )
 
+def replace_original(text, url):
+    payload = {
+        'replace_original': 'true',
+        'text': text
+    }
+    resp = requests.post(url, json=payload)
+    resp_json = resp.json()
+    if not resp.ok:
+        _logger.error(f'could not replace original message with %s to %s, response=%s', text, url, resp_json)
+    else:
+        _logger.debug('replaced message with %s to %s', text, url)
+
 
 def respond_expense_added(expense):
-    expense_string = f'*Amount:* {expense.amount}\n' \
-                     f'*Date:* {expense.payed_on}\n'
-
-    if expense.description:
-        expense_string = expense_string + f'*Description*: {expense.description}'
-
     return jsonify(
         response_type='in_channel',
         blocks=[
-            _text_section('*Expense added.*'),
-            _text_section(expense_string),
+            _text_section(f'*Expense added.*\n{expense}'),
             _buttons(
                 Button(text='Delete', value=f'delete {expense.id}', style='danger')
             )
@@ -56,19 +61,36 @@ def respond_recap(year_month, expenses_table):
     )
 
 
-def send_message(target, text):
-    req_url = 'https://slack.com/api/chat.postMessage'
+def post_ephemeral(channel_id, user_id, text):
+    req_url = 'https://slack.com/api/chat.postEphemeral'
     params = {
         'token': os.environ['BOT_USER_OAUTH_TOKEN'],
-        'channel': target,
+        'channel': channel_id,
+        'user': user_id,
         'text': text,
     }
     resp = requests.get(req_url, params=params)
     resp_json = resp.json()
     if not resp.ok or not resp_json['ok']:
-        _logger.error(f'could not send message %s to %s, response=%s', text, target, resp_json)
+        _logger.error(f'could not post ephemeral %s to %s for user %s, response=%s',
+                      text, channel_id, user_id, resp_json)
     else:
-        _logger.debug('sent message %s to %s, ephemeral=%s', text, target, 'False')
+        _logger.debug('posted ephemeral %s to %s for %s', text, channel_id, user_id)
+
+
+def post_message(channel_id, text):
+    req_url = 'https://slack.com/api/chat.postMessage'
+    params = {
+        'token': os.environ['BOT_USER_OAUTH_TOKEN'],
+        'channel': channel_id,
+        'text': text,
+    }
+    resp = requests.get(req_url, params=params)
+    resp_json = resp.json()
+    if not resp.ok or not resp_json['ok']:
+        _logger.error(f'could not post message %s to %s, response=%s', text, channel_id, resp_json)
+    else:
+        _logger.debug('posted message %s to %s', text, channel_id)
 
 
 def download_file(file_id):
@@ -107,7 +129,7 @@ def upload_file(file_path, channel_id, description):
     req_url = f'https://slack.com/api/files.upload'
     with open(file_path, 'rb') as f:
         file = {
-            'file': (file_path, open(file_path, 'rb'))
+            'file': (file_path, f)
         }
 
         params = {

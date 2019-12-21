@@ -278,10 +278,11 @@ def action():
 
     user_id = payload['user']['id']
     channel_id = payload['channel']['id']
+    response_url = payload['response_url']
     action_requests = payload['actions']
 
     actions = [parsing.parse_action(req['value']) for req in action_requests]
-    threads = [threading.Thread(target=a, args=(user_id, channel_id)) for a in actions]
+    threads = [threading.Thread(target=a.execute, args=(user_id, channel_id, response_url)) for a in actions]
 
     for t in threads:
         t.start()
@@ -290,13 +291,13 @@ def action():
 
 
 def _handle_file_shared(event_json):
-    slack.send_message(event_json['channel_id'], 'Processing file...')
+    slack.post_message(event_json['channel_id'], 'Processing file...')
 
     file_id = event_json['file_id']
     file_path = slack.download_file(file_id)
     expense = parsing.parse_expense_from_file(file_path)
     if not expense:
-        return slack.send_message(event_json['channel_id'],
+        return slack.post_message(event_json['channel_id'],
                                   'Sorry, this kind of file is not supported. '
                                   'Currently supported files are:\n'
                                   '- Trenitalia ticket\n'
@@ -306,19 +307,16 @@ def _handle_file_shared(event_json):
     proof_url = documents.upload(file_path, f'{user_id}/{expense.payed_on}')
 
     if not proof_url:
-        return slack.send_message(event_json['channel_id'],
+        return slack.post_message(event_json['channel_id'],
                                   'Sorry, there was a problem uploading the file')
 
     expense.employee_user_id = user_id
     expense.proof_url = proof_url
     with Database() as db:
         db.add_employee_if_not_exists(user_id)
-        expense_id = db.add_expense(expense)
+        db.add_expense(expense)
 
-    slack.send_message(event_json['channel_id'],
-                       f'Expense added. Amount={expense.amount}, date={expense.payed_on}'
-                       f'{f", description={expense.description}" if expense.description else ""}. '
-                       f'If you wish to delete the expense use `/delete {expense_id}`.')
+    slack.respond_expense_added(expense)
 
 
 def _handle_message(event_json):
@@ -330,7 +328,7 @@ def _handle_message(event_json):
         return
 
     if not text.startswith('/'):
-        slack.send_message(event_json['channel'], f'Hi, I\'m TrasfertaBot. '
+        slack.post_message(event_json['channel'], f'Hi, I\'m TrasfertaBot. '
                                                   f'Type `/info` to get additional information.')
 
 

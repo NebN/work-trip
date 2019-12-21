@@ -19,7 +19,7 @@ class IncrementalParser:
         """
         res = re.match(pattern, self._text)
         if res:
-            matches = list(map(lambda x: res.group(x), range(1, len(res.groups()) + 1)))
+            matches = [res.group(x) for x in range(1, len(res.groups()) + 1)]
             for match in matches:
                 if match:
                     self._text = self._text.replace(match, '', 1).strip()
