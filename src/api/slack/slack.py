@@ -140,9 +140,8 @@ def download_file(file_id):
 
     token = os.environ['BOT_USER_OAUTH_TOKEN']
     resp = requests.get(download_url, headers={'Authorization': 'Bearer ' + token})
-    resp_json = resp.json()
-    if not resp.ok or not resp_json['ok']:
-        _logger.warn('cannot download file, response=%s', resp_json)
+    if not resp.ok:
+        _logger.warn('cannot download file, response=%s', resp)
         return None
     else:
         with open(filename, 'wb') as file:

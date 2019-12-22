@@ -9,13 +9,6 @@ from .IncrementalParser import IncrementalParser
 from .file_to_text import file_to_text
 
 
-def parse_email_address(text):
-    pattern = '''.*?(\S+@\S+\.\S+).*'''
-    search = re.search(pattern, text)
-    if search:
-        return search.group(1)
-
-
 def parse_expense(text):
     """
     /add 28.5           # adds an expense of €28.50 to today

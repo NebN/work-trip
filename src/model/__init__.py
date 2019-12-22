@@ -1,3 +1,3 @@
-from .model import Email, Employee, Expense
+from .model import Employee, Expense
 
-__all__ = ['Email', 'Employee', 'Expense']
+__all__ = ['Employee', 'Expense']

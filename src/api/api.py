@@ -4,13 +4,10 @@ import json
 from datetime import date
 
 from flask import Flask, request
-from itsdangerous import URLSafeSerializer, BadSignature
 from prettytable import PrettyTable
 
 from src import parsing
 from src.log import logging
-from src.mail import sender
-from src.model import Email
 from src.persistence import Database
 from src.persistence import documents
 from src.util import dateutil
@@ -30,77 +27,17 @@ def post():
     return slack.in_channel(f'hello {request.values["user_name"]}')
 
 
-@api.route('/register', methods=['POST'])
-def register():
-    """
-    Register an email with the service.
-    This is used when receiving emails with attachments
-    to be able to know whom they are owned by.
-
-    Usage:
-    /register mail@email.com
-
-    Extra characters are allowed before or after the email.
-    """
-    text = request.values['text']
-    address = parsing.parse_email_address(text)
-    _logger.debug(f'register {text}')
-    if not address:
-        return slack.in_channel(f'email not found in {text}')
-    else:
-        with Database() as db:
-            existing_email = db.get_email(address)
-            if existing_email:
-                _logger.debug('email %s already exists %s verified status=%s', address, existing_email.verified)
-                return slack.in_channel(f'{address} already registered, verified status={existing_email.verified}')
-            user_id = request.values['user_id']
-            db.add_employee_if_not_exists(user_id, request.values['user_name'])
-
-            serializer = URLSafeSerializer(os.getenv('SECRET_KEY'))
-            verification_token = serializer.dumps(address, salt=os.getenv('SALT'))
-            base_domain = os.getenv('BASE_DOMAIN')
-            verification_link = f'{base_domain}/confirm/{verification_token}'
-            db.add_email(Email(address=address, employee_user_id=user_id))
-            _logger.debug('verification link %s', verification_link)
-            sender.send_message(to_address=address, subj='TrasfertaBot verification',
-                                message=f'click the following link to verify your address\n{verification_link}')
-            return slack.in_channel(f'email registered, please click the verification link sent to {address}')
-
-
-@api.route('/confirm/<token>')
-def confirm(token):
-    """
-    Confirm the email by clicking the registration token
-    received after having used the /receive command.
-    """
-    serializer = URLSafeSerializer(os.getenv('SECRET_KEY'))
-    try:
-        address = serializer.loads(token, salt=os.getenv('SALT'))
-    except BadSignature:
-        return 'confirmation link is not valid'
-
-    with Database() as db:
-        current_email = db.get_email(address)
-        if current_email.verified:
-            return f'{address} already verified'
-        else:
-            db.verify_email(address)
-            return f'{address} verified successfully'
-
-
-'''
-Adds an expense to a date if specified, today if not.
-A description can also be added.
-
-Usages:
-/add 28.5           # adds an expense of €28.50 to today
-/add 28.5 15        # adds an expense of €28.50 to the last 15th of the month
-/add 28.5 15/11     # adds an expense of €28.50 to the last 15th of November
-'''
-
-
 @api.route('/add', methods=['POST'])
 def add():
+    """
+    Adds an expense to a date if specified, today if not.
+    A description can also be added.
+
+    Usages:
+    /add 28.5           # adds an expense of €28.50 to today
+    /add 28.5 15        # adds an expense of €28.50 to the last 15th of the month
+    /add 28.5 15/11     # adds an expense of €28.50 to the last 15th of November
+    """
     text = request.values['text']
     expense = parsing.parse_expense(text)
     if expense:
@@ -156,7 +93,7 @@ def recap():
     text = request.values['text'].strip()
 
     if len(text) == 0:
-        month = dateutil.minus_months(date.today(), 1).month
+        month = date.today().month
     else:
         month = dateutil.month_from_string(text)
         if not month:
@@ -180,12 +117,6 @@ def recap():
 @api.route('/info', methods=['POST'])
 def info():
     message = 'Available commands:\n' \
-              '>/register\n' \
-              'Register an email with the service\n' \
-              'This is used when receiving emails with attachments\n' \
-              'to be able to know whom they are owned by\n' \
-              'Usages:\n' \
-              '`/register mail@email.com`\n' \
               '\n' \
               '>/add\n' \
               'Adds an expense to a date if specified, to today if not.\n' \
@@ -202,12 +133,12 @@ def info():
               '`/delete 42,43,44`\n' \
               '\n' \
               '>/recap\n' \
-              'Sends a recap of the desired month if specified, of last month if not. ' \
+              'Sends a recap of the desired month if specified, of the current month if not. ' \
               '(Month can be shortened to it\'s first 3 letters, e.g.: Oct)\n' \
               'Usages:\n' \
-              '`/recap oct(ober)`\nsends the recap for October\n' \
-              '`/recap cur(rent)`\nsends the recap for the current month\n' \
-              '`/recap`\nsends the recap for the previous month\n' \
+              '`/recap oct(ober) `\nsends the recap for October\n' \
+              '`/recap pre(vious)`\nsends the recap for the current month\n' \
+              '`/recap`\nsends the recap for the current month\n' \
               '\n' \
               '*In addition to these commands you can upload a file representing an expense*, ' \
               'this will have the same effect as `/add` if the file is supported'
@@ -269,6 +200,22 @@ def action():
 
     for t in threads:
         t.start()
+
+    return 'ok'
+
+
+@api.route('/mail', methods=['POST'])
+def inbox():
+    _logger.info(request)
+    try:
+        _logger.info(request.get_json())
+    except Exception:
+        _logger.info('no json')
+
+    try:
+        _logger.info(request.values)
+    except Exception:
+        _logger.info('no values')
 
     return 'ok'
 

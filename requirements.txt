@@ -4,7 +4,6 @@ psycopg2==2.8.2
 PyYAML==5.1
 gunicorn==20.0.4
 requests==2.21.0
-itsdangerous==1.1.0
 sendgrid==6.1.0
 python-dotenv==0.10.3
 dropbox==9.4.0

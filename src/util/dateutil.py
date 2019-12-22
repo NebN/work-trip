@@ -61,6 +61,8 @@ def month_from_string(text):
     s = text[0:3].lower()
     if s == 'cur' or s == 'att':
         return date.today().month
+    if s == 'pre':
+        return minus_months(date.today(), 1).month
     if s == 'jan' or s == 'gen':
         return 1
     if s == 'feb':

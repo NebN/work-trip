@@ -35,18 +35,6 @@ class Database:
         self.logger.warn('Employee not found with user_id %s', user_id)
         return None
 
-    def get_email(self, address):
-        cur = self._conn.cursor()
-        cur.execute('SELECT address, employee_user_id, verified '
-                    'FROM email '
-                    'WHERE address = %s', (address,))
-        res = cur.fetchone()
-        if res:
-            self.logger.debug('Email found %s', res)
-            return Email(address=res[0], employee_user_id=res[1], verified=res[2])
-        self.logger.warn('Email not found with address %s', address)
-        return None
-
     def get_expense(self, expense_id):
         cur = self._conn.cursor()
         cur.execute('SELECT id, employee_user_id, payed_on, amount, description, proof_url '
@@ -94,17 +82,6 @@ class Database:
         self.logger.info('adding %s', employee)
         cur.execute('INSERT INTO employee (user_id, user_name, channel_id) VALUES (%s, %s, %s)',
                     (employee.user_id, employee.user_name, employee.channel_id))
-
-    def add_email(self, email):
-        cur = self._conn.cursor()
-        self.logger.info('adding %s', email)
-        cur.execute('INSERT INTO email (address, employee_user_id, verified) VALUES (%s, %s, %s)',
-                    (email.address, email.employee_user_id, email.verified))
-
-    def verify_email(self, address):
-        cur = self._conn.cursor()
-        self.logger.info('verifying Email %s', address)
-        cur.execute('UPDATE email SET verified = true WHERE address = %s', (address,))
 
     def add_expense(self, expense):
         cur = self._conn.cursor()
