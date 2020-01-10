@@ -107,10 +107,14 @@ def recap():
 
         table = PrettyTable()
         table.field_names = ['id', 'date', 'amount', 'description', 'has attachment']
+        last_week = None
         for e in expenses:
+            current_week = e.payed_on.strftime('%V')
+            if last_week and last_week != current_week:
+                table.add_row(['---', '---', '---', f'---< WEEK {current_week} >---', '---'])
             table.add_row([e.id, e.payed_on.strftime('%d'), e.amount,
                            e.description if e.description else '', e.proof_url is not None])
-
+            last_week = current_week
         return slack.respond_recap(start.strftime("%Y-%m"), table)
 
 
