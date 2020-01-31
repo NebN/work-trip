@@ -54,7 +54,7 @@ class Database:
         cur.execute('SELECT id, employee_user_id, payed_on, amount, description, proof_url, external_id '
                     'FROM expense '
                     'WHERE employee_user_id = %s AND payed_on BETWEEN %s AND %s '
-                    'ORDER BY payed_on ASC',
+                    'ORDER BY payed_on, id',
                     (user_id, date_from, to))
         res = cur.fetchall()
         self.logger.debug('Expenses found %s', res)
@@ -102,7 +102,16 @@ class Database:
         self.logger.info('deleting expense with id %s', expense.id)
         cur.execute('DELETE FROM expense WHERE id = %s', (expense.id,))
 
-        if expense.proof_url:
+        if expense.proof_url and not self.proof_url_is_still_needed(expense.proof_url):
             documents.delete(expense.proof_url)
 
         return cur.statusmessage.endswith('1')
+
+    def proof_url_is_still_needed(self, proof_url):
+        cur = self._conn.cursor()
+        self.logger.info('looking for proof_url to see if it\'s still needed %s', proof_url)
+        cur.execute('SELECT COUNT(1) '
+                    'FROM expense '
+                    'WHERE proof_url = %s '
+                    'LIMIT 1', (proof_url,))
+        return cur.fetchone()[0] == 1

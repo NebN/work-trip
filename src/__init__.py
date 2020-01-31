@@ -1,1 +1,1 @@
-__all__ = ['api', 'mail']
+__all__ = ['api']

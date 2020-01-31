@@ -10,7 +10,7 @@ from src import parsing
 from src.log import logging
 from src.persistence import Database
 from src.persistence import documents
-from src.util import dateutil
+from src.util import dateutil, collectionutil
 from .slack import slack
 
 api = Flask(__name__)
@@ -105,17 +105,18 @@ def recap():
         user_id = request.values['user_id']
         expenses = db.get_expenses(user_id, start, end)
 
-        table = PrettyTable()
-        table.field_names = ['id', 'date', 'amount', 'description', 'has attachment']
-        last_week = None
-        for e in expenses:
-            current_week = e.payed_on.strftime('%V')
-            if last_week and last_week != current_week:
-                table.add_row(['---', '---', '---', f'---< WEEK {current_week} >---', '---'])
-            table.add_row([e.id, e.payed_on.strftime('%d'), e.amount,
-                           e.description if e.description else '', e.proof_url is not None])
-            last_week = current_week
-        return slack.respond_recap(start.strftime("%Y-%m"), table)
+        expenses_by_week = map(lambda exp: (exp.payed_on.strftime('%V'), exp), expenses)
+        tables = []
+        for week_expenses in collectionutil.groupbykey(expenses_by_week):
+            table = PrettyTable()
+            table.field_names = ['id', 'date', 'amount', 'description', 'has attachment']
+
+            for e in week_expenses:
+                table.add_row([e.id, e.payed_on.strftime('%d'), e.amount,
+                               e.description if e.description else '', e.proof_url is not None])
+            tables.append(table.get_string())
+
+        return slack.respond_recap(start.strftime("%Y-%m"), tables)
 
 
 @api.route('/info', methods=['POST'])
@@ -138,7 +139,7 @@ def info():
               '\n' \
               '>/recap\n' \
               'Sends a recap of the desired month if specified, of the current month if not. ' \
-              '(Month can be shortened to it\'s first 3 letters, e.g.: Oct)\n' \
+              '(Month can be shortened to it\'s first 3 letters, e.g.: Oct or Ott<)\n' \
               'Usages:\n' \
               '`/recap oct(ober) `\nsends the recap for October\n' \
               '`/recap pre(vious)`\nsends the recap for the current month\n' \

@@ -65,18 +65,20 @@ def respond_expense_added(expense):
     )
 
 
-def respond_recap(year_month, expenses_table):
-    return jsonify(
+def respond_recap(year_month, expense_tables):
+    json = jsonify(
         response_type='in_channel',
         blocks=[
             _text_section(f'*Recap for {year_month}*'),
-            _text_section(f'```{expenses_table}```'),
+            * [_text_section(f'```{e}```') for e in expense_tables],
             _buttons(
                 Button(text='Download Attachments', value=f'download {year_month}', style='primary'),
                 Button(text='Destroy the Planet', value='destroy', style='danger')
             )
         ]
     )
+    # _logger.info(f'recap response {json.json}')
+    return json
 
 
 def post_ephemeral(channel_id, user_id, text):
