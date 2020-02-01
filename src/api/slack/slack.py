@@ -1,4 +1,5 @@
 import os
+import json
 import hashlib
 
 import requests
@@ -72,13 +73,22 @@ def respond_recap(year_month, expense_tables):
             _text_section(f'*Recap for {year_month}*'),
             * [_text_section(f'```{e}```') for e in expense_tables],
             _buttons(
-                Button(text='Download Attachments', value=f'download {year_month}', style='primary'),
+                Button(text='Download Attachments', value=f'ask -download {year_month}', style='primary'),
                 Button(text='Destroy the Planet', value='destroy', style='danger')
             )
         ]
     )
-    # _logger.info(f'recap response {json.json}')
     return json
+
+
+def ask_download(channel_id, year_month):
+    blocks = [
+        _buttons(
+            Button(text='Download multiple files', value=f'download {year_month}', style='primary'),
+            Button(text='Download as single file', value=f'download -m {year_month}', style='primary')
+        )
+    ]
+    post_message(channel_id=channel_id, text='', blocks=json.dumps(blocks))
 
 
 def post_ephemeral(channel_id, user_id, text):
@@ -98,13 +108,17 @@ def post_ephemeral(channel_id, user_id, text):
         _logger.debug('posted ephemeral %s to %s for %s', text, channel_id, user_id)
 
 
-def post_message(channel_id, text):
+def post_message(channel_id, text, blocks=None):
     req_url = 'https://slack.com/api/chat.postMessage'
     params = {
         'token': os.environ['BOT_USER_OAUTH_TOKEN'],
         'channel': channel_id,
         'text': text,
     }
+
+    if blocks:
+        params['blocks'] = blocks
+
     resp = requests.get(req_url, params=params)
     resp_json = resp.json()
     if not resp.ok or not resp_json['ok']:

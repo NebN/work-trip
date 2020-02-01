@@ -8,3 +8,5 @@ sendgrid==6.1.0
 python-dotenv==0.10.3
 dropbox==9.4.0
 prettytable==0.7.2
+PyPDF2==1.26.0
+Pillow==7.0.0

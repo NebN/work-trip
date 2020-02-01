@@ -123,26 +123,26 @@ def recap():
 def info():
     message = 'Available commands:\n' \
               '\n' \
-              '>/add\n' \
+              '>*/add*\n' \
               'Adds an expense to a date if specified, to today if not.\n' \
               'A description can also be added.\n' \
               'Usages:\n' \
               '`/add 28.5 description (optional)` \nadds an expense of €28.50 to today with a description\n' \
               '`/add 28.5 15`\nadds an expense of €28.50 to the last 15th of the month\n' \
               '`/add 28.5 15/11`\nadds an expense of €28.50 to the last 15th of November\n' \
-              '\n' \
-              '>/delete\n' \
+              '\n\n' \
+              '>*/delete*\n' \
               'Deletes the expense with given id\n' \
               'Usages:\n' \
               '`/delete 42`\n' \
               '`/delete 42,43,44`\n' \
-              '\n' \
-              '>/recap\n' \
+              '\n\n' \
+              '>*/recap*\n' \
               'Sends a recap of the desired month if specified, of the current month if not. ' \
-              '(Month can be shortened to it\'s first 3 letters, e.g.: Oct or Ott<)\n' \
+              '(Month can be shortened to it\'s first 3 letters, e.g.: oct or ott)\n' \
               'Usages:\n' \
-              '`/recap oct(ober) `\nsends the recap for October\n' \
-              '`/recap pre(vious)`\nsends the recap for the current month\n' \
+              '`/recap oct`\nsends the recap for October\n' \
+              '`/recap pre`\nsends the recap for the previous month\n' \
               '`/recap`\nsends the recap for the current month\n' \
               '\n' \
               '*In addition to these commands you can upload a file representing an expense*, ' \

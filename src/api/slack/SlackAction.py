@@ -1,6 +1,9 @@
 from abc import abstractmethod
 from src.persistence import Database, documents
 from src.api.slack import slack
+from src.util import fileutil
+from src import log
+
 
 class SlackAction:
     @abstractmethod
@@ -30,9 +33,10 @@ class DeleteExpense(SlackAction):
 
 
 class DownloadAttachments(SlackAction):
-    def __init__(self, date_start, date_end):
+    def __init__(self, date_start, date_end, merge):
         self.date_start = date_start
         self.date_end = date_end
+        self.merge = merge
 
     def execute(self, user_id, channel_id, response_url):
         with Database() as db:
@@ -41,15 +45,38 @@ class DownloadAttachments(SlackAction):
                 slack.post_ephemeral(channel_id, user_id,
                                      f'No attachments found between {self.date_start} and {self.date_end}')
             else:
-                for exp in expenses:
-                    shared = slack.file_share(channel_id=channel_id, external_id=exp.external_id)
-                    if not shared:
-                        file_path = documents.download(exp.proof_url)
-                        title = str(exp)
-                        file_id = slack.file_upload(file_path, channel_id, description=title)
-                        external_id = slack.file_add(title=title, file_id=file_id)
-                        exp.external_id = external_id
-                        db.update_expense(exp)
+                if self.merge:
+                    slack.post_message(channel_id=channel_id, text=f'Sending attachments from '
+                                                                   f'{self.date_start} to {self.date_end}, '
+                                                                   f'this might take a few moments.')
+                    paths = [documents.download(e.proof_url) for e in expenses]
+                    merged = fileutil.merge_to_pdf(paths, name=f'expenses_{self.date_start}_{self.date_end}.pdf')
+                    slack.file_upload(merged, channel_id, description='')
+                else:
+                    for exp in expenses:
+                        shared = slack.file_share(channel_id=channel_id, external_id=exp.external_id)
+                        # Slack's free tier does not conserve all chat messages and shared files,
+                        # because of this the requested file might have expired.
+                        if not shared:
+                            file_path = documents.download(exp.proof_url)
+                            title = str(exp)
+                            file_id = slack.file_upload(file_path, channel_id, description=title)
+                            external_id = slack.file_add(title=title, file_id=file_id)
+                            exp.external_id = external_id
+                            db.update_expense(exp)
+
+
+class Ask(SlackAction):
+    def __init__(self, question, request_text):
+        self.question = question
+        self.request_text = request_text
+        self.logger = log.get_logger(__name__)
+
+    def execute(self, user_id, channel_id, response_url):
+        if self.question == 'download':
+            slack.ask_download(channel_id, self.request_text)
+        else:
+            self.logger.warn('unexpected question: %s', self.question)
 
 
 class DestroyPlanet(SlackAction):

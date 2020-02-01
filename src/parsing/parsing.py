@@ -4,10 +4,13 @@ from datetime import date, datetime
 
 from src.model import Expense
 from src.util import dateutil
-from src.api.slack import DownloadAttachments, DeleteExpense, DestroyPlanet
+from src.api.slack import DownloadAttachments, DeleteExpense, Ask, DestroyPlanet
+from src.log import logging
 from .IncrementalParser import IncrementalParser
 from .file_to_text import file_to_text
 
+
+_logger = logging.get_logger(__name__)
 
 def parse_expense(text):
     """
@@ -57,16 +60,21 @@ def parse_expense_from_file(path):
 
 
 def parse_action(text):
+    _logger.info('parsing action from %s', text)
+
     ip = IncrementalParser(text)
     action_name = ip.extract('''(\w+)''')[0]
 
-    if action_name == 'download':
-        year, month = ip.extract('''(\d{4})-(\d{2})''')
+    if action_name == 'ask':
+        question = ip.extract('''(-)(\w+)''')[1]
+        return Ask(question=question, request_text=ip.text())
 
+    elif action_name == 'download':
+        merge = ip.extract('''(-m)''') is not None
+        year, month = ip.extract('''(\d{4})-(\d{2})''')
         date_start = date(int(year), int(month), 1)
         date_end = date_start.replace(day=dateutil.max_day_of_month(date_start))
-
-        return DownloadAttachments(date_start=date_start, date_end=date_end)
+        return DownloadAttachments(date_start=date_start, date_end=date_end, merge=merge)
 
     elif action_name == 'delete':
         expense_id = ip.extract('''(\d+)''')[0]
