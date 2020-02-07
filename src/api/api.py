@@ -116,6 +116,20 @@ def recap():
                                e.description if e.description else '', e.proof_url is not None])
             tables.append(table.get_string())
 
+        # if we have at least one expense create the final row section with the totals
+        if len(expenses) > 0:
+            total_table = PrettyTable()
+            total_table.field_names = ['from', 'to', 'expenses', 'total amount', 'attachments']
+            dates = list(map(lambda x: x.payed_on, expenses))
+            from_value = min(dates)
+            to_value = max(dates)
+            expenses_value = len(expenses)
+            total_amount_value = sum(map(lambda x: x.amount, expenses))
+            attachments_value = len([ex for ex in expenses if ex.proof_url is not None])
+            total_table.add_row([from_value, to_value, expenses_value, total_amount_value, attachments_value])
+
+            tables.append(total_table)
+
         return slack.respond_recap(start.strftime("%Y-%m"), tables)
 
 
