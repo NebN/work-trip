@@ -143,6 +143,8 @@ def info():
               'Usages:\n' \
               '`/add 28.5 description (optional)` \nadds an expense of €28.50 to today with a description\n' \
               '`/add 28.5 15`\nadds an expense of €28.50 to the last 15th of the month\n' \
+              '`/add 28.5 yes(terday)`\nadds an expense of €28.50 to yesterday, text inside parentheses is optional\n' \
+              '`/add 28.5 ier(i)`\nadds an expense of €28.50 to yesterday, text inside parentheses is optional\n' \
               '`/add 28.5 15/11`\nadds an expense of €28.50 to the last 15th of November\n' \
               '\n\n' \
               '>*/delete*\n' \

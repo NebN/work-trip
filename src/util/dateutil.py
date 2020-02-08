@@ -17,6 +17,8 @@ def last_date_of_day_month(day_number, month_number):
 
     return computed_date
 
+def minus_days(d, days):
+    return d - timedelta(days=days)
 
 def minus_months(d, months):
     computed_date = d

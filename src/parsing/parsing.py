@@ -20,16 +20,25 @@ def parse_expense(text):
     /add 28.5 15/11     # adds an expense of €28.50 to the last 15th of November
     """
     ip = IncrementalParser(text)
+    # amount
     amount_search = ip.extract('''(\d+(?:[\.,]\d+)?)''')
-    date_search = ip.extract('''(\d{1,2}(?:[/-]\d{1,2})?)''')
-    description_search = ip.extract('''(.+)''')
-
     if amount_search:
         amount = amount_search[0]
-        try:
-            payed_on = _interpret_day(date_search[0]) if date_search else date.today()
-        except ValueError:
-            return None
+
+        # payed_on
+        _logger.info(ip.text().lower())
+        if ip.text().lower().startswith('yes') or ip.text().lower().startswith('ier'):
+            payed_on = dateutil.minus_days(date.today(), 1)
+            ip.extract('''(\w+)''')
+        else:
+            date_search = ip.extract('''(\d{1,2}(?:[/-]\d{1,2})?)''')
+            try:
+                payed_on = _interpret_day(date_search[0]) if date_search else date.today()
+            except ValueError:
+                return None
+
+        # description
+        description_search = ip.extract('''(.+)''')
         description = description_search[0] if description_search else None
         return Expense(payed_on=payed_on, amount=amount, description=description)
 
