@@ -92,7 +92,7 @@ def recap():
     """
     text = request.values['text'].strip()
 
-    if len(text) == 0:
+    if not text:
         month = date.today().month
     else:
         month = dateutil.month_from_string(text)
@@ -117,7 +117,7 @@ def recap():
             tables.append(table.get_string())
 
         # if we have at least one expense create the final row section with the totals
-        if len(expenses) > 0:
+        if expenses:
             total_table = PrettyTable()
             total_table.field_names = ['from', 'to', 'expenses', 'total amount', 'attachments']
             dates = list(map(lambda x: x.payed_on, expenses))

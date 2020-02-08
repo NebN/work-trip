@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<style>
+table {
+  font-family: Arial, Helvetica, sans-serif;
+  border-collapse: collapse;
+  width: 100%;
+}
+
+th, td {
+  text-align: left;
+  padding:2px;
+}
+
+tr:nth-child(even) {
+  background-color: #f2f2f2;
+}
+
+input.checkbox {
+    width: 20px;
+    height: 20px;
+}
+
+tr.strikeout td { position:relative        } /* Setup a new coordinate system   */
+tr.strikeout td:before {                     /* Create a new element that       */
+  content: " ";                              /* …has no text content            */
+  position: absolute;                        /* …is absolutely positioned       */
+  left: 0; top: 46%; width: 100%;            /* …with the top across the middle */
+  border-bottom: 2px solid #000;             /* …and with a border on the top   */
+}
+
+tr.faded {
+  opacity: 0.3;
+}
+tr.border-top {
+  border-top: solid 3px;
+}
+</style>
+<head>
+	<title>${date_start} ${date_end}</title>
+	<meta charset="UTF-8">
+</head>
+<body>
+  <table>
+    <tr>
+      <th></th>
+      <th>Date</th>
+      <th>Amount</th>
+      <th>Description</th>
+      <th>Attachment</th>
+    </tr>
+    <%
+      week = expenses[0].payed_on.strftime('%V')
+    %>
+    % for expense in expenses:
+      <%
+        current_week = expense.payed_on.strftime('%V')
+        week_changed = week != current_week
+        week = current_week
+      %>
+      ${makerow(expense, week_changed)}
+    % endfor
+  </table>
+</body>
+<script src="https://ajax.googleapis.com/ajax/libs/jquery/3.2.1/jquery.min.js"></script>
+<script type="text/javascript">
+  $(".checkbox").change(function() {
+   if (this.checked) {
+     $(this).parent().parent().addClass("strikeout");
+     $(this).parent().parent().addClass("faded");
+   } else {
+     $(this).parent().parent().removeClass("strikeout");
+     $(this).parent().parent().removeClass("faded");
+   }
+  });
+</script>
+
+<%! from src.persistence import documents %>
+
+<%def name="makerow(e, week_changed)">
+  % if week_changed:
+    <tr class="border-top">
+  % else:
+    <tr>
+  % endif
+      <td><input type="checkbox" class="checkbox"></td>
+      <td>${e.payed_on}</td>\
+      <td>${e.amount}</td>\
+      <td>${description_td(e)}</td>\
+      <td>${attachment_td(e)}</td>\
+    </tr>
+</%def>
+
+<%def name="description_td(e)">
+  % if e.description:
+    ${e.description}\
+  % else:
+    <div></div>\
+  % endif
+</%def>
+
+<%def name="attachment_td(e)">
+  % if e.proof_url:
+    <a href="${documents.temp_download_link(e.proof_url)}">download</a>\
+  % else:
+    <div></div>\
+  % endif
+</%def>

@@ -14,7 +14,7 @@ def merge_to_pdf(paths, name=None):
     pdfs = [p for p in paths if extension(p) == '.pdf']
     not_pdfs = [p for p in paths if extension(p) != '.pdf']
 
-    if len(not_pdfs) > 0:
+    if not_pdfs:
         img = Image.open(not_pdfs[0])
         other_images = [Image.open(p) for p in not_pdfs[1:]]
         img.save(filename, 'PDF', save_all=True, append_images=other_images)

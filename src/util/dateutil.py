@@ -1,5 +1,4 @@
-from datetime import timedelta
-from datetime import date
+from datetime import datetime, date, timedelta
 
 
 def last_date_of_day(day_number):
@@ -53,6 +52,11 @@ def dates_in_current_year_month():
     month = today.month
     max_day = today.day
     return [date(year, month, n) for n in range(1, max_day + 1)]
+
+
+def start_and_end_date_from_year_month_string(ymstring):
+    d = datetime.strptime(ymstring, '%Y-%m').date()
+    return d, d.replace(day=max_day_of_month(d))
 
 
 def month_from_string(text):

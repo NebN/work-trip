@@ -4,13 +4,14 @@ from datetime import date, datetime
 
 from src.model import Expense
 from src.util import dateutil
-from src.api.slack import DownloadAttachments, DeleteExpense, Ask, DestroyPlanet
+from src.api.slack import DownloadAttachments, DeleteExpense, Ask, HtmlRecap, DestroyPlanet
 from src.log import logging
 from .IncrementalParser import IncrementalParser
 from .file_to_text import file_to_text
 
 
 _logger = logging.get_logger(__name__)
+
 
 def parse_expense(text):
     """
@@ -79,6 +80,12 @@ def parse_action(text):
     elif action_name == 'delete':
         expense_id = ip.extract('''(\d+)''')[0]
         return DeleteExpense(expense_id=expense_id)
+
+    elif action_name == 'html':
+        year, month = ip.extract('''(\d{4})-(\d{2})''')
+        date_start = date(int(year), int(month), 1)
+        date_end = date_start.replace(day=dateutil.max_day_of_month(date_start))
+        return HtmlRecap(date_start=date_start, date_end=date_end)
 
     elif action_name == 'destroy':
         return DestroyPlanet()

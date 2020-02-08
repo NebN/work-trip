@@ -67,3 +67,8 @@ class DateUtilTests(unittest.TestCase):
 
         dates_in_feb_2020 = [date(2020, 2, n) for n in range(1, 29 + 1)]
         self.assertEqual(dates_in_feb_2020, dateutil.dates_in_year_month(2020, 2))
+
+    def test_start_and_end_date_from_year_month_string(self):
+        start, end = dateutil.start_and_end_date_from_year_month_string('2020-01')
+        self.assertEqual(date(2020, 1, 1), start)
+        self.assertEqual(date(2020, 1, 31), end)

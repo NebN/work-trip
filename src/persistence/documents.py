@@ -32,6 +32,9 @@ def delete(path):
         return f'Error while deleting {path}'
 
 
-
-
-
+def temp_download_link(path):
+    try:
+        resp = _dbox.files_get_temporary_link(path)
+        return resp.link
+    except ApiError as e:
+        _logger.error('could not get temporary download link for %s, cause: %s', path, e)

@@ -67,18 +67,18 @@ def respond_expense_added(expense):
 
 
 def respond_recap(year_month, expense_tables):
-    json = jsonify(
+    return jsonify(
         response_type='in_channel',
         blocks=[
             _text_section(f'*Recap for {year_month}*'),
             * [_text_section(f'```{e}```') for e in expense_tables],
             _buttons(
                 Button(text='Download Attachments', value=f'ask -download {year_month}', style='primary'),
+                Button(text='Download as Html', value=f'html {year_month}', style='primary'),
                 Button(text='Destroy the Planet', value='destroy', style='danger')
             )
         ]
     )
-    return json
 
 
 def ask_download(channel_id, year_month):
