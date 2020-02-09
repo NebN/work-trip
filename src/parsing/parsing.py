@@ -26,17 +26,24 @@ def parse_expense(text, user_id=None):
         amount = amount_search[0]
 
         # payed_on
+        # check if the date required is yes(terday) or ier(i)
         if ip.text().lower().startswith('yes') or ip.text().lower().startswith('ier'):
             timezone_offset = slack.user_info(user_id)['tz_offset']
             user_date = dateutil.plus_seconds(datetime.utcnow().date(), timezone_offset)
             payed_on = dateutil.plus_days(user_date, -1)
             ip.extract('''(\w+)''')
         else:
+            # otherwise parse the date
             date_search = ip.extract('''(\d{1,2}(?:[/-]\d{1,2})?)''')
-            try:
-                payed_on = _interpret_day(date_search[0]) if date_search else date.today()
-            except ValueError:
-                return None
+            if date_search:
+                try:
+                    payed_on = _interpret_day(date_search[0])
+                except ValueError:
+                    return None
+            # if there was no date to parse default to today
+            else:
+                timezone_offset = slack.user_info(user_id)['tz_offset']
+                payed_on = dateutil.plus_seconds(datetime.utcnow().date(), timezone_offset)
 
         # description
         description_search = ip.extract('''(.+)''')
@@ -99,6 +106,9 @@ def parse_action(text):
 
     elif action_name == 'destroy':
         return DestroyPlanet()
+
+    else:
+        _logger.warn('unexpected action %s', action_name)
 
 
 def _interpret_day(text):
