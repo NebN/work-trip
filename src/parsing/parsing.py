@@ -4,7 +4,7 @@ from datetime import date, datetime
 
 from src.model import Expense
 from src.util import dateutil
-from src.api.slack import DownloadAttachments, DeleteExpense, Ask, HtmlRecap, DestroyPlanet
+from src.api.slack import DownloadAttachments, DeleteExpense, Ask, HtmlRecap, DestroyPlanet, slack
 from src.log import logging
 from .IncrementalParser import IncrementalParser
 from .file_to_text import file_to_text
@@ -13,7 +13,7 @@ from .file_to_text import file_to_text
 _logger = logging.get_logger(__name__)
 
 
-def parse_expense(text):
+def parse_expense(text, user_id=None):
     """
     /add 28.5           # adds an expense of €28.50 to today
     /add 28.5 15        # adds an expense of €28.50 to the last 15th of the month
@@ -26,9 +26,10 @@ def parse_expense(text):
         amount = amount_search[0]
 
         # payed_on
-        _logger.info(ip.text().lower())
         if ip.text().lower().startswith('yes') or ip.text().lower().startswith('ier'):
-            payed_on = dateutil.minus_days(date.today(), 1)
+            timezone_offset = slack.user_info(user_id)['tz_offset']
+            user_date = dateutil.plus_seconds(datetime.utcnow().date(), timezone_offset)
+            payed_on = dateutil.plus_days(user_date, -1)
             ip.extract('''(\w+)''')
         else:
             date_search = ip.extract('''(\d{1,2}(?:[/-]\d{1,2})?)''')

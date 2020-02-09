@@ -39,10 +39,10 @@ def add():
     /add 28.5 15/11     # adds an expense of €28.50 to the last 15th of November
     """
     text = request.values['text']
-    expense = parsing.parse_expense(text)
+    user_id = request.values['user_id']
+    expense = parsing.parse_expense(text, user_id=user_id)
     if expense:
         with Database() as db:
-            user_id = request.values['user_id']
             db.add_employee_if_not_exists(user_id, request.values['user_name'])
             expense.employee_user_id = user_id
             expense_id = db.add_expense(expense)
