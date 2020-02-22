@@ -59,7 +59,7 @@ def replace_original(text, url):
 def respond_expense_added(expense):
     return jsonify(
         response_type='in_channel',
-        blocks=_build_recap_blocks(expense)
+        blocks=_build_expense_added_blocks(expense)
     )
 
 
