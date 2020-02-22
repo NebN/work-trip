@@ -1,10 +1,10 @@
 import locale
 import re
-from datetime import date, datetime
+from datetime import datetime
 
 from src.model import Expense
 from src.util import dateutil
-from src.api.slack import DownloadAttachments, DeleteExpense, Ask, HtmlRecap, DestroyPlanet, slack
+from src.api.slack import DownloadAttachments, DeleteExpense, Ask, HtmlRecap, DestroyPlanet, Recap, slack
 from src.log import logging
 from .IncrementalParser import IncrementalParser
 from .file_to_text import file_to_text
@@ -89,9 +89,7 @@ def parse_action(text):
 
     elif action_name == 'download':
         merge = ip.extract('''(-m)''') is not None
-        year, month = ip.extract('''(\d{4})-(\d{2})''')
-        date_start = date(int(year), int(month), 1)
-        date_end = date_start.replace(day=dateutil.max_day_of_month(date_start))
+        date_start, date_end = dateutil.start_and_end_date_from_year_month_string(ip.extract('''(\d{4}-\d{2})''')[0])
         return DownloadAttachments(date_start=date_start, date_end=date_end, merge=merge)
 
     elif action_name == 'delete':
@@ -99,10 +97,12 @@ def parse_action(text):
         return DeleteExpense(expense_id=expense_id)
 
     elif action_name == 'html':
-        year, month = ip.extract('''(\d{4})-(\d{2})''')
-        date_start = date(int(year), int(month), 1)
-        date_end = date_start.replace(day=dateutil.max_day_of_month(date_start))
+        date_start, date_end = dateutil.start_and_end_date_from_year_month_string(ip.extract('''(\d{4}-\d{2})''')[0])
         return HtmlRecap(date_start=date_start, date_end=date_end)
+
+    elif action_name == 'recap':
+        date_start, date_end = dateutil.start_and_end_date_from_year_month_string(ip.extract('''(\d{4}-\d{2})''')[0])
+        return Recap(date_start=date_start, date_end=date_end)
 
     elif action_name == 'destroy':
         return DestroyPlanet()

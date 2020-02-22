@@ -27,7 +27,10 @@ class ScheduledTask:
         wait_time = delay_in_seconds if delay_in_seconds else self.interval_in_seconds
         self._timer = Timer(wait_time, self._run)
         self._logger.debug('next call in %s seconds', wait_time)
-        self._timer.start()
+        try:
+            self._timer.start()
+        except KeyboardInterrupt:
+            self.stop()
 
     def stop(self):
         self._timer.cancel()

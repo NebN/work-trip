@@ -19,5 +19,9 @@ class Expense:
     employee_user_id: str = None
     id: int = None  # Primary Key
 
+    def mrkdown(self):
+        return f'*{self}*'
+
     def __repr__(self):
-        return (f'*[{self.id}] ' if self.id else '*') + f'{self.payed_on} €{self.amount} {self.description}*'
+        return (f'[{self.id}] ' if self.id else '') + f'{self.payed_on} €{self.amount} ' \
+                                                      f'{self.description if self.description else ""}'

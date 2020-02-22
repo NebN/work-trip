@@ -4,8 +4,10 @@ import hashlib
 
 import requests
 from flask import jsonify
+from prettytable import PrettyTable
 
 from src.log import logging
+from src.util import collectionutil
 from .Button import Button
 
 _logger = logging.get_logger(__name__)
@@ -57,28 +59,23 @@ def replace_original(text, url):
 def respond_expense_added(expense):
     return jsonify(
         response_type='in_channel',
-        blocks=[
-            _text_section(f'Added {expense}'),
-            _buttons(
-                Button(text='Delete', value=f'delete {expense.id}', style='danger')
-            )
-        ]
+        blocks=_build_recap_blocks(expense)
     )
 
 
-def respond_recap(year_month, expense_tables):
+def post_expense_added(channel_id, expense):
+    post_message(channel_id, blocks=json.dumps(_build_expense_added_blocks(expense)))
+
+
+def respond_recap(expenses):
     return jsonify(
         response_type='in_channel',
-        blocks=[
-            _text_section(f'*Recap for {year_month}*'),
-            * [_text_section(f'```{e}```') for e in expense_tables],
-            _buttons(
-                Button(text='Download Attachments', value=f'ask -download {year_month}', style='primary'),
-                Button(text='Download as Html', value=f'html {year_month}', style='primary'),
-                Button(text='Destroy the Planet', value='destroy', style='danger')
-            )
-        ]
+        blocks=_build_recap_blocks(expenses)
     )
+
+
+def post_recap(channel_id, expenses):
+    post_message(channel_id, blocks=json.dumps(_build_recap_blocks(expenses)))
 
 
 def ask_download(channel_id, year_month):
@@ -88,7 +85,7 @@ def ask_download(channel_id, year_month):
             Button(text='Download as single file', value=f'download -m {year_month}', style='primary')
         )
     ]
-    post_message(channel_id=channel_id, text='', blocks=json.dumps(blocks))
+    post_message(channel_id=channel_id, blocks=json.dumps(blocks))
 
 
 def post_ephemeral(channel_id, user_id, text):
@@ -108,13 +105,17 @@ def post_ephemeral(channel_id, user_id, text):
         _logger.debug('posted ephemeral %s to %s for %s', text, channel_id, user_id)
 
 
-def post_message(channel_id, text, blocks=None):
+def post_message(channel_id, text=None, blocks=None):
+    print('postingmessage')
+    print(blocks)
     req_url = 'https://slack.com/api/chat.postMessage'
     params = {
         'token': os.environ['BOT_USER_OAUTH_TOKEN'],
         'channel': channel_id,
-        'text': text,
     }
+
+    if text:
+        params['text'] = text
 
     if blocks:
         params['blocks'] = blocks
@@ -279,7 +280,6 @@ def _buttons(*bs):
 def _button(b):
     button_dict = {
         'type': 'button',
-        'style': b.style,
         'value': b.value,
         'text': {
             'type': 'plain_text',
@@ -292,3 +292,60 @@ def _button(b):
         button_dict['style'] = b.style
 
     return button_dict
+
+
+def _build_expense_added_blocks(expense):
+    return [
+        _text_section(f'Added {expense.mrkdown()}'),
+        _buttons(
+            Button(text='Delete', value=f'delete {expense.id}', style='danger'),
+            Button(text='Recap', value=f'recap {expense.payed_on.strftime("%Y-%m")}', style='primary')
+        )
+    ]
+
+
+def _build_recap_blocks(expenses):
+    if not expenses:
+        return [
+            _text_section('No expenses found.')
+        ]
+    else:
+        expense_tables = _expense_tables_from_expenses(expenses)
+        year_month = expenses[0].payed_on.strftime('%Y-%m')
+        return [
+            _text_section(f'*Recap for {year_month}*'),
+            *[_text_section(f'```{e}```') for e in expense_tables],
+            _buttons(
+                Button(text='Download Attachments', value=f'ask -download {year_month}'),
+                Button(text='Download as Html', value=f'html {year_month}', style='primary'),
+                Button(text='Destroy the Planet', value='destroy', style='danger')
+            )
+        ]
+
+
+def _expense_tables_from_expenses(expenses):
+    expenses_by_week = map(lambda exp: (exp.payed_on.strftime('%V'), exp), expenses)
+    tables = []
+    for week_expenses in collectionutil.groupbykey(expenses_by_week):
+        table = PrettyTable()
+        table.field_names = ['id', 'date', 'amount', 'description', 'has attachment']
+
+        for e in week_expenses:
+            table.add_row([e.id, e.payed_on.strftime('%d'), e.amount,
+                           e.description if e.description else '', e.proof_url is not None])
+        tables.append(table.get_string())
+
+    # if we have at least one expense create the final row section with the totals
+    if expenses:
+        total_table = PrettyTable()
+        total_table.field_names = ['from', 'to', 'expenses', 'total amount', 'attachments']
+        dates = list(map(lambda x: x.payed_on, expenses))
+        from_value = min(dates)
+        to_value = max(dates)
+        expenses_value = len(expenses)
+        total_amount_value = sum(map(lambda x: x.amount, expenses))
+        attachments_value = len([ex for ex in expenses if ex.proof_url is not None])
+        total_table.add_row([from_value, to_value, expenses_value, total_amount_value, attachments_value])
+
+        tables.append(total_table)
+        return tables

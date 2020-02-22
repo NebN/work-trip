@@ -28,7 +28,7 @@ class DeleteExpense(SlackAction):
                                          f'This expense does not belong to you {employee.user_name}.')
                 else:
                     if db.delete_expense(expense):
-                        slack.replace_original(f'{expense} deleted successfully.', response_url)
+                        slack.replace_original(f'{expense.mrkdown()} deleted successfully.', response_url)
                     else:
                         slack.post_ephemeral(channel_id, user_id, 'Something went wrong while deleting the expense.')
 
@@ -99,6 +99,17 @@ class HtmlRecap(SlackAction):
                 with open(filename, 'w+') as file:
                     file.write(html)
                 slack.file_upload(filename, channel_id, description=f'recap from {self.date_start} to {self.date_end}')
+
+
+class Recap(SlackAction):
+    def __init__(self, date_start, date_end):
+        self.date_start = date_start
+        self.date_end = date_end
+
+    def execute(self, user_id, channel_id, response_url):
+        with Database() as db:
+            expenses = db.get_expenses(user_id, self.date_start, self.date_end)
+            slack.post_recap(channel_id, expenses)
 
 
 class DestroyPlanet(SlackAction):

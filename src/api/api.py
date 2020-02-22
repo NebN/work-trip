@@ -57,6 +57,7 @@ def add():
                                 'You can always add a description at the end of the message.')
 
 
+@api.route('/del', methods=['POST'])
 @api.route('/delete', methods=['POST'])
 def delete():
     """
@@ -69,11 +70,11 @@ def delete():
             expense = db.get_expense(expense_id)
             if not expense:
                 responses.append(f'No expense with id {expense_id} found.')
-            if expense.employee_user_id != request.values['user_id']:
+            elif expense.employee_user_id != request.values['user_id']:
                 responses.append(f'The expense with id {expense_id} '
                                  f'does not belong to you ({request.values["user_name"]}).')
-            if db.delete_expense(expense):
-                responses.append(f'Expense {expense} deleted successfully.')
+            elif db.delete_expense(expense):
+                responses.append(f'{expense.mrkdown()} deleted successfully.')
             else:
                 responses.append('Something went wrong while deleting the expense.')
 
@@ -104,33 +105,7 @@ def recap():
         end = start.replace(day=dateutil.max_day_of_month(start))
         user_id = request.values['user_id']
         expenses = db.get_expenses(user_id, start, end)
-
-        expenses_by_week = map(lambda exp: (exp.payed_on.strftime('%V'), exp), expenses)
-        tables = []
-        for week_expenses in collectionutil.groupbykey(expenses_by_week):
-            table = PrettyTable()
-            table.field_names = ['id', 'date', 'amount', 'description', 'has attachment']
-
-            for e in week_expenses:
-                table.add_row([e.id, e.payed_on.strftime('%d'), e.amount,
-                               e.description if e.description else '', e.proof_url is not None])
-            tables.append(table.get_string())
-
-        # if we have at least one expense create the final row section with the totals
-        if expenses:
-            total_table = PrettyTable()
-            total_table.field_names = ['from', 'to', 'expenses', 'total amount', 'attachments']
-            dates = list(map(lambda x: x.payed_on, expenses))
-            from_value = min(dates)
-            to_value = max(dates)
-            expenses_value = len(expenses)
-            total_amount_value = sum(map(lambda x: x.amount, expenses))
-            attachments_value = len([ex for ex in expenses if ex.proof_url is not None])
-            total_table.add_row([from_value, to_value, expenses_value, total_amount_value, attachments_value])
-
-            tables.append(total_table)
-
-        return slack.respond_recap(start.strftime("%Y-%m"), tables)
+        return slack.respond_recap(expenses)
 
 
 @api.route('/info', methods=['POST'])
@@ -147,11 +122,11 @@ def info():
               '`/add 28.5 ier(i)`\nadds an expense of €28.50 to yesterday, text inside parentheses is optional\n' \
               '`/add 28.5 15/11`\nadds an expense of €28.50 to the last 15th of November\n' \
               '\n\n' \
-              '>*/delete*\n' \
+              '>*/del*\n' \
               'Deletes the expense with given id\n' \
               'Usages:\n' \
-              '`/delete 42`\n' \
-              '`/delete 42,43,44`\n' \
+              '`/del 42`\n' \
+              '`/del 42,43,44`\n' \
               '\n\n' \
               '>*/recap*\n' \
               'Sends a recap of the desired month if specified, of the current month if not. ' \
@@ -242,13 +217,14 @@ def inbox():
 
 
 def _handle_file_shared(event_json):
-    ts = slack.post_message(event_json['channel_id'], 'Processing file...')
+    channel_id = event_json['channel_id']
+    ts = slack.post_message(channel_id, 'Processing file...')
 
     file_id = event_json['file_id']
     file_path = slack.download_file(file_id)
     expense = parsing.parse_expense_from_file(file_path)
     if not expense:
-        return slack.update(event_json['channel_id'], ts,
+        return slack.update(channel_id, ts,
                             'Sorry, this kind of file is not supported. '
                             'Currently supported files are:\n'
                             '- Trenitalia ticket\n'
@@ -260,7 +236,7 @@ def _handle_file_shared(event_json):
         external_id = slack.file_add(title=str(expense), file_id=file_id, file_bytes=f.read())
 
     if not proof_url or not external_id:
-        return slack.update(event_json['channel_id'], ts,
+        return slack.update(channel_id, ts,
                             'Sorry, there was a problem uploading the file')
 
     expense.employee_user_id = user_id
@@ -269,10 +245,11 @@ def _handle_file_shared(event_json):
 
     with Database() as db:
         db.add_employee_if_not_exists(user_id)
-        db.add_expense(expense)
+        expense_id = db.add_expense(expense)
 
-    return slack.update(event_json['channel_id'], ts,
-                        f'Expense added {expense}')
+    expense.id = expense_id
+    slack.update(channel_id, ts, 'File processed successfully.')
+    return slack.post_expense_added(channel_id, expense)
 
 
 def _handle_message(event_json):
