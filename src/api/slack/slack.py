@@ -106,8 +106,6 @@ def post_ephemeral(channel_id, user_id, text):
 
 
 def post_message(channel_id, text=None, blocks=None):
-    print('postingmessage')
-    print(blocks)
     req_url = 'https://slack.com/api/chat.postMessage'
     params = {
         'token': os.environ['BOT_USER_OAUTH_TOKEN'],
@@ -119,6 +117,7 @@ def post_message(channel_id, text=None, blocks=None):
 
     if blocks:
         params['blocks'] = blocks
+        _logger.debug('blocks %s', blocks)
 
     resp = requests.get(req_url, params=params)
     resp_json = resp.json()
@@ -167,7 +166,7 @@ def download_file(file_id):
     return filename
 
 
-def file_upload(file_path, channel_id, description):
+def file_upload(file_path, channel_id, description, unfurl=None):
     req_url = f'https://slack.com/api/files.upload'
     with open(file_path, 'rb') as f:
         file = {
@@ -179,6 +178,10 @@ def file_upload(file_path, channel_id, description):
             'initial_comment': description,
             'channels': [channel_id],
         }
+
+        if unfurl is not None:
+            params['unfurl_links'] = unfurl
+            params['unfurl_media'] = unfurl
 
         _logger.debug('uploading file %s', file_path)
 
@@ -242,6 +245,25 @@ def file_share(channel_id, external_id):
         return True
 
 
+def post_email_expenses(user_channel, expenses, failed):
+    if not [e for e in expenses if e]:
+        post_message(user_channel, 'An email was received from an address registered by you, '
+                                   'but no expenses were able to be parsed.\n'
+                                   'Currently supported files are:\n'
+                                   '- Trenitalia ticket\n'
+                                   '- Trenord ticket\n')
+    else:
+        blocks = [[
+            _text_section(f'{expense.no_id()} received via email, do you wish to add it?'),
+            _buttons(
+                Button(text='Confirm', value=f'expense c {expense.id}', style='primary'),
+                Button(text='Discard', value=f'expense d {expense.id}', style='danger')
+            )
+        ] for expense in expenses]
+
+        post_message(user_channel, blocks=json.dumps(*blocks))
+
+
 def user_info(user_id):
     req_url = f'https://slack.com/api/users.info'
     params = {
@@ -258,6 +280,30 @@ def user_info(user_id):
         return None
     else:
         return resp_json['user']
+
+
+def im_channel_of_user(user_id):
+    req_url = f'https://slack.com/api/users.conversations'
+    params = {
+        'token': os.environ['BOT_USER_OAUTH_TOKEN'],
+        'user': user_id,
+        'types': 'im'
+    }
+
+    _logger.debug('requesting channel info for user %s', user_id)
+
+    resp = requests.post(req_url, params=params)
+    resp_json = resp.json()
+    if not resp.ok:
+        _logger.warn('cannot get channel info for user %s, response=%s', user_id, resp_json)
+        return None
+    else:
+        channels = resp_json['channels']
+        if not channels:
+            _logger.warn('no im channels for found for user %s, response=%s', user_id, resp_json)
+            return None
+        else:
+            return channels[0]
 
 
 def _text_section(text):

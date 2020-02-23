@@ -4,7 +4,7 @@ from datetime import datetime
 
 from src.model import Expense
 from src.util import dateutil
-from src.api.slack import DownloadAttachments, DeleteExpense, Ask, HtmlRecap, DestroyPlanet, Recap, slack
+from src.api.slack import *
 from src.log import logging
 from .IncrementalParser import IncrementalParser
 from .file_to_text import file_to_text
@@ -104,6 +104,17 @@ def parse_action(text):
         date_start, date_end = dateutil.start_and_end_date_from_year_month_string(ip.extract('''(\d{4}-\d{2})''')[0])
         return Recap(date_start=date_start, date_end=date_end)
 
+    elif action_name == 'expense':
+        action = ip.extract('''(\w)''')[0]
+        expense_id = ip.extract('''(\d+)''')[0]
+
+        if action == 'c':
+            action = CloseExpensePending.CONFIRM
+        elif action == 'd':
+            action = CloseExpensePending.DISCARD
+
+        return CloseExpensePending(expense_id, action)
+
     elif action_name == 'destroy':
         return DestroyPlanet()
 
@@ -122,3 +133,10 @@ def _interpret_day(text):
             return dateutil.last_date_of_day_month(day, month)
         else:
             return dateutil.last_date_of_day(day)
+
+
+def parse_email_address(text):
+    pattern = '''.*?(\S+@\S+\.\S+).*'''
+    search = re.search(pattern, text)
+    if search:
+        return search.group(1)

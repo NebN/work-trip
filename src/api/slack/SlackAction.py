@@ -98,7 +98,9 @@ class HtmlRecap(SlackAction):
                 filename = f'{self.date_start}_{self.date_end}_recap.html'
                 with open(filename, 'w+') as file:
                     file.write(html)
-                slack.file_upload(filename, channel_id, description=f'recap from {self.date_start} to {self.date_end}')
+                slack.file_upload(filename, channel_id,
+                                  description=f'recap from {self.date_start} to {self.date_end}',
+                                  unfurl=False)
 
 
 class Recap(SlackAction):
@@ -110,6 +112,30 @@ class Recap(SlackAction):
         with Database() as db:
             expenses = db.get_expenses(user_id, self.date_start, self.date_end)
             slack.post_recap(channel_id, expenses)
+
+
+class CloseExpensePending(SlackAction):
+    CONFIRM = 'CONFIRM'
+    DISCARD = 'DISCARD'
+
+    def __init__(self, expense_pending_id, action):
+        self.expense_pending_id = expense_pending_id
+        self.action = action
+        self.logger = log.get_logger(__name__)
+
+    def execute(self, user_id, channel_id, response_url):
+        if self.action == CloseExpensePending.CONFIRM:
+            with Database() as db:
+                expense_id = db.confirm_expense_pending(self.expense_pending_id)
+                expense = db.get_expense(expense_id)
+                slack.replace_original(f'Expense confirmed {expense.mrkdown()}', response_url)
+        elif self.action == CloseExpensePending.DISCARD:
+            with Database() as db:
+                db.discard_expense_pending(self.expense_pending_id)
+                expense = db.get_expense_pending(self.expense_pending_id)
+                slack.replace_original(f'Expense discarded {expense.mrkdown()}', response_url)
+        else:
+            self.logger.warn('Action not recognized %s', self.action)
 
 
 class DestroyPlanet(SlackAction):

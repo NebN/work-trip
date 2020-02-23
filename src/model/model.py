@@ -22,6 +22,17 @@ class Expense:
     def mrkdown(self):
         return f'*{self}*'
 
+    def no_id(self):
+        return f'*{self.payed_on} €{self.amount} {self.description if self.description else ""}*'
+
     def __repr__(self):
         return (f'[{self.id}] ' if self.id else '') + f'{self.payed_on} €{self.amount} ' \
                                                       f'{self.description if self.description else ""}'
+
+
+@dataclass
+class Email:
+    address: str  # Primary key
+    employee_user_id: str  # references Employee (user_id)
+    verified: bool = False
+

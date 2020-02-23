@@ -8,9 +8,10 @@ _dbox = dropbox.Dropbox(os.getenv('DROPBOX_ACCESS_TOKEN'))
 
 
 def upload(filename, save_path):
+    _logger.debug('uploading %s to %s', filename, save_path)
     with open(filename, 'rb') as f:
         try:
-            res = _dbox.files_upload(f.read(), f'/{save_path}/{filename}')
+            res = _dbox.files_upload(f.read(), f'/{save_path}/{os.path.basename(filename)}')
             return res.path_display
         except ApiError as e:
             _logger.error(f'could not upload file %s', e)

@@ -6,17 +6,18 @@ from pdfminer.pdfinterp import PDFResourceManager, PDFPageInterpreter
 from pdfminer.pdfpage import PDFPage
 
 
-def file_to_text(path):
+def file_to_text(path=None, file=None):
     extension = path.split('.')[-1]
     if extension == 'pdf':
-        return _pdf_to_text(path)
+        return _pdf_to_text(path, file)
 
 
-def _pdf_to_text(path):
+def _pdf_to_text(path=None, file=None):
+    fp = file if file else open(path, 'rb')
+
     resource_manager = PDFResourceManager()
     out = io.StringIO()
     device = TextConverter(resource_manager, outfp=out, laparams=LAParams())
-    fp = open(path, 'rb')
     interpreter = PDFPageInterpreter(resource_manager, device)
 
     for page in PDFPage.get_pages(fp):

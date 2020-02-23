@@ -35,6 +35,29 @@ class Database:
         self.logger.warn('Employee not found with user_id %s', user_id)
         return None
 
+    def get_email(self, address):
+        cur = self._conn.cursor()
+        cur.execute('SELECT address, employee_user_id, verified '
+                    'FROM email '
+                    'WHERE address = %s', (address,))
+        res = cur.fetchone()
+        if res:
+            self.logger.debug('Email found %s', res)
+            return Email(address=res[0], employee_user_id=res[1], verified=res[2])
+        self.logger.warn('Email not found with address %s', address)
+        return None
+
+    def add_email(self, email):
+        cur = self._conn.cursor()
+        self.logger.info('adding %s', email)
+        cur.execute('INSERT INTO email (address, employee_user_id, verified) VALUES (%s, %s, %s)',
+                    (email.address, email.employee_user_id, email.verified))
+
+    def verify_email(self, address):
+        cur = self._conn.cursor()
+        self.logger.info('verifying Email %s', address)
+        cur.execute('UPDATE email SET verified = true WHERE address = %s', (address,))
+
     def get_expense(self, expense_id):
         cur = self._conn.cursor()
         cur.execute('SELECT id, employee_user_id, payed_on, amount, description, proof_url '
@@ -46,6 +69,19 @@ class Database:
             return Expense(id=res[0], employee_user_id=res[1], payed_on=res[2],
                            amount=res[3], description=res[4], proof_url=res[5])
         self.logger.warn('Expense not found with id %s', expense_id)
+        return None
+
+    def get_expense_pending(self, expense_id):
+        cur = self._conn.cursor()
+        cur.execute('SELECT employee_user_id, payed_on, amount, description '
+                    'FROM expense_pending '
+                    'WHERE id = %s', (expense_id, ))
+        res = cur.fetchone()
+        if res:
+            self.logger.debug('Expense pending found %s', res)
+            return Expense(employee_user_id=res[0], payed_on=res[1],
+                           amount=res[2], description=res[3])
+        self.logger.warn('Expense pending not found with id %s', expense_id)
         return None
 
     def get_expenses(self, user_id, date_from, date_to=None):
@@ -70,6 +106,14 @@ class Database:
                                     expense.proof_url, expense.external_id, expense.id))
         return cur.statusmessage.endswith('1')
 
+    def update_employee(self, employee):
+        self.logger.debug('updating employee %s', employee)
+        cur = self._conn.cursor()
+        cur.execute('UPDATE employee '
+                    'SET user_name=%s, channel_id=%s '
+                    'WHERE user_id=%s', (employee.user_name, employee.channel_id, employee.user_id))
+        return cur.statusmessage.endswith('1')
+
     def add_employee_if_not_exists(self, user_id, user_name=None):
         if not self.get_employee(user_id):
             name = user_name if user_name else slack.user_info(user_id)['name']
@@ -92,6 +136,41 @@ class Database:
                     (expense.employee_user_id, expense.payed_on, expense.amount,
                      expense.description, expense.proof_url, expense.external_id))
         return cur.fetchone()[0]
+
+    def add_expense_pending(self, expense):
+        cur = self._conn.cursor()
+        self.logger.info('adding %s', expense)
+        cur.execute('INSERT INTO expense_pending (employee_user_id, payed_on, amount, description, proof_url) '
+                    'VALUES (%s, %s, %s, %s, %s) '
+                    'RETURNING id',
+                    (expense.employee_user_id, expense.payed_on, expense.amount,
+                     expense.description, expense.proof_url))
+        return cur.fetchone()[0]
+
+    def confirm_expense_pending(self, expense_pending_id):
+        cur = self._conn.cursor()
+        self.logger.info('confirming expense pending %s', expense_pending_id)
+        cur.execute('INSERT INTO expense (employee_user_id, payed_on, amount, description, proof_url) '
+                    'SELECT employee_user_id, payed_on, amount, description, proof_url '
+                    'FROM expense_pending '
+                    'WHERE id=%s'
+                    'RETURNING id',
+                    (expense_pending_id,))
+        expense_id = cur.fetchone()[0]
+
+        cur.execute('UPDATE expense_pending '
+                    'SET outcome = %s '
+                    'WHERE id = %s', ('CONFIRMED', expense_pending_id))
+
+        return expense_id
+
+    def discard_expense_pending(self, expense_pending_id):
+        cur = self._conn.cursor()
+        self.logger.info('discarding expense pending %s', expense_pending_id)
+        cur.execute('UPDATE expense_pending '
+                    'SET outcome = %s '
+                    'WHERE id = %s', ('DISCARDED', expense_pending_id))
+        return cur.statusmessage.endswith('1')
 
     def delete_expense_with_id(self, expense_id):
         expense = self.get_expense(expense_id)

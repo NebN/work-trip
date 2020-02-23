@@ -11,3 +11,4 @@ prettytable==0.7.2
 PyPDF2==1.26.0
 Pillow==7.0.0
 mako==1.1.1
+itsdangerous==1.1.0

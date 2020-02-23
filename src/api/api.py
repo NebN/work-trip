@@ -1,16 +1,19 @@
 import os
 import threading
 import json
+import re
 from datetime import date
 
 from flask import Flask, request
-from prettytable import PrettyTable
+from itsdangerous import URLSafeSerializer, BadSignature
 
 from src import parsing
 from src.log import logging
 from src.persistence import Database
 from src.persistence import documents
-from src.util import dateutil, collectionutil
+from src.mail import ReceivedMail, sender
+from src.model import Email
+from src.util import dateutil
 from .slack import slack
 
 api = Flask(__name__)
@@ -25,6 +28,74 @@ def get():
 @api.route('/', methods=['POST'])
 def post():
     return slack.in_channel(f'hello {request.values["user_name"]}')
+
+
+@api.route('/register', methods=['POST'])
+def register():
+    """
+    Register an email with the service.
+    This is used when receiving emails with attachments
+    to be able to know whom they are owned by.
+
+    Usage:
+    /register mail@email.com
+
+    Extra characters are allowed before or after the email.
+    """
+    text = request.values['text']
+    address = parsing.parse_email_address(text)
+    _logger.debug(f'register {text}')
+    if not address:
+        return slack.in_channel(f'email not recognized from: {text}')
+    else:
+        with Database() as db:
+            existing_email = db.get_email(address)
+            if existing_email:
+                _logger.debug('email %s already exists %s verified status=%s', address, existing_email.verified)
+                if existing_email.verified:
+                    return slack.in_channel(f'{address} already registered and verified.')
+                else:
+                    _send_verification_link(address)
+                    return slack.in_channel(f'{address} already registered but still not verified, '
+                                            f'a new verification link has been sent.')
+            user_id = request.values['user_id']
+            db.add_employee_if_not_exists(user_id, request.values['user_name'])
+            db.add_email(Email(address=address, employee_user_id=user_id))
+
+            _send_verification_link(address)
+
+            return slack.in_channel(f'Email registered, please click the verification link sent to {address}')
+
+
+def _send_verification_link(address):
+    serializer = URLSafeSerializer(os.getenv('SECRET_KEY'))
+    verification_token = serializer.dumps(address, salt=os.getenv('SALT'))
+    base_domain = os.getenv('BASE_DOMAIN')
+    verification_link = f'{base_domain}/confirm/{verification_token}'
+    _logger.debug('verification link %s', verification_link)
+    sender.send_message(to_address=address, subj='TrasfertaBot verification',
+                        message=f'click the following link to verify your address\n{verification_link}')
+
+
+@api.route('/confirm/<token>')
+def confirm(token):
+    """
+    Confirm the email by clicking the registration token
+    received after having used the /receive command.
+    """
+    serializer = URLSafeSerializer(os.getenv('SECRET_KEY'))
+    try:
+        address = serializer.loads(token, salt=os.getenv('SALT'))
+    except BadSignature:
+        return 'confirmation link is not valid'
+
+    with Database() as db:
+        current_email = db.get_email(address)
+        if current_email.verified:
+            return f'{address} already verified'
+        else:
+            db.verify_email(address)
+            return f'{address} verified successfully'
 
 
 @api.route('/add', methods=['POST'])
@@ -111,6 +182,13 @@ def recap():
 @api.route('/info', methods=['POST'])
 def info():
     message = 'Available commands:\n' \
+              '>/register\n' \
+              'Register an email with the Bot\n' \
+              'This is used when receiving emails with attachments\n' \
+              'to be able to know whom they are owned by\n' \
+              'emails should be sent to *trasfertabot@email2webhook.com*\n' \
+              'Usages:\n' \
+              '`/register mail@email.com`\n' \
               '\n' \
               '>*/add*\n' \
               'Adds an expense to a date if specified, to today if not.\n' \
@@ -202,18 +280,93 @@ def action():
 
 @api.route('/mail', methods=['POST'])
 def inbox():
-    _logger.info(request)
-    try:
-        _logger.info(request.get_json())
-    except Exception:
-        _logger.info('no json')
+    sent_by = request.values['sender']
+    # this is necessary to clean up addresses when receiving mail redirected from Gmail
+    match = re.match(r'''(\w+)\+caf_=.+(@.+)''', sent_by)
+    if match:
+        sent_by = "".join(match.groups())
 
-    try:
-        _logger.info(request.values)
-    except Exception:
-        _logger.info('no values')
+    _logger.info('got email from %s', sent_by)
+    m = ReceivedMail(request.values['content'])
+
+    if sent_by == 'forwarding-noreply@google.com':
+        _handle_gmail(m)
+    else:
+        _handle_regular_mail(m, sent_by)
 
     return 'ok'
+
+
+def _handle_gmail(mail):
+    body = mail.body()
+    address = re.search(r'''(.+@.+\..+)\s+has requested to automatically forward mail''', body).group(1)
+    code = re.search(r'''Confirmation code:\s+(\w+)\s?''', body).group(1)
+    with Database() as db:
+        email_record = db.get_email(address)
+        if email_record:
+            user_id = email_record.employee_user_id
+            channel_id = _user_channel_from_id(user_id)
+            if email_record.verified:
+                slack.post_message(channel_id, 'It seems like you are trying to redirect some email to me '
+                                               'from a gmail account, '
+                                               f'you are going to need this confirmation code: {code}')
+            else:
+                slack.post_message(channel_id, 'It seems like you are trying to redirect some email to me '
+                                               'from a gmail account, '
+                                               f'the email you are using is still not verified.\n'
+                                               'To receive a new verification link '
+                                               f'type `/register {email_record.address}`')
+
+
+def _handle_regular_mail(mail, sent_by):
+    with Database() as db:
+        email_record = db.get_email(sent_by)
+        if not email_record:
+            _logger.warn('received email from unrecognized address %s', sent_by)
+        else:
+            address = email_record.address
+            user_id = email_record.employee_user_id
+            channel_id = _user_channel_from_id(user_id)
+
+            if not channel_id:
+                _logger.error('cannot proceed handling email, channel_id is required')
+            elif not email_record.verified:
+                _logger.warn('received email from unverified address %s', address)
+                slack.post_message(channel_id, f'Email received on {mail.date()} from {address}, '
+                                               f'subject: {mail.subject()}.\n'
+                                               f'This email is still not verified, '
+                                               f'please verify it before using it with the Bot.\n'
+                                               f'To receive a new verification link '
+                                               f'type `/register {email_record.address}`')
+            else:
+                expenses = []
+                failed = []
+                for f in mail.attachments():
+                    expense = parsing.parse_expense_from_file(f)
+                    if not expense:
+                        failed.append(os.path.basename(f))
+                    else:
+                        proof_url = documents.upload(f, f'{user_id}/{expense.payed_on}')
+                        expense.proof_url = proof_url
+                        expense.employee_user_id = user_id
+                        pending_id = db.add_expense_pending(expense)
+                        expense.id = pending_id
+                        expenses.append(expense)
+
+                slack.post_email_expenses(channel_id, expenses, failed)
+
+
+def _user_channel_from_id(user_id):
+    with Database() as db:
+        user_record = db.get_employee(user_id)
+        channel_id = user_record.channel_id
+        if not channel_id:
+            user_channel = slack.im_channel_of_user(user_record.user_id)
+            if user_channel:
+                channel_id = user_channel['id']
+                user_record.channel_id = channel_id
+                db.update_employee(user_record)
+        return channel_id
 
 
 def _handle_file_shared(event_json):
