@@ -1,2 +1,2 @@
 # work-trip
-Automation of boring tasks related to work trips.
+Slack Bot for automation of boring tasks related to work trips.
